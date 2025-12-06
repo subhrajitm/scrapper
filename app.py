@@ -239,7 +239,7 @@ def index():
 
     if request.method == "POST":
         selected_practice_area = request.form.get("practice_area", "").strip()
-        selected_location = request.form.get("location", "").strip()
+        location_input = request.form.get("location", "").strip()
         selected_city = request.form.get("city", "").strip()
         selected_state = request.form.get("state", "").strip()
         selected_country = request.form.get("country", "").strip()
@@ -255,9 +255,19 @@ def index():
             if not selected_practice_area:
                 error = "Please select a practice area."
             else:
-                # Combine location fields
-                location_parts = [selected_city, selected_state, selected_location, selected_country]
-                location_str = " ".join(p for p in location_parts if p).strip()
+                # Use the simplified location field if provided, otherwise combine individual fields
+                if location_input:
+                    location_str = location_input
+                    # Try to parse city/state from the location string for display
+                    parts = location_input.split(',')
+                    if len(parts) >= 2:
+                        selected_city = parts[0].strip()
+                        selected_state = parts[1].strip()
+                else:
+                    # Fall back to individual fields
+                    location_parts = [selected_city, selected_state, selected_country]
+                    location_str = " ".join(p for p in location_parts if p).strip()
+                selected_location = location_str
                 
                 websites, total_results = get_websites_for_filters(
                     selected_practice_area,
