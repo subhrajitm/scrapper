@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Industry Website Finder</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --bg-elevated: #020617;
+        --accent: #22c55e;
+        --accent-soft: rgba(34, 197, 94, 0.1);
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --border: #1f2937;
+        --danger: #ef4444;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #020617;
+        color: var(--text);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 16px;
+      }
+
+      .shell {
+        width: 100%;
+        max-width: 640px;
+        background: #020617;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        padding: 16px 16px 14px;
+      }
+
+      .shell-header {
+        margin-bottom: 8px;
+      }
+
+      .shell-title {
+        font-size: 15px;
+        font-weight: 500;
+      }
+
+      .shell-subtitle {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .shell-body {
+        padding: 0;
+      }
+
+      form {
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+        margin-bottom: 10px;
+      }
+
+      label {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+        display: block;
+      }
+
+      .field-group {
+        flex: 1 1 auto;
+      }
+
+      select {
+        width: 100%;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(51, 65, 85, 0.9);
+        background: #020617;
+        color: var(--text);
+        font-size: 13px;
+        outline: none;
+      }
+
+      select:focus {
+        border-color: var(--accent);
+      }
+
+      .submit-group {
+        flex-shrink: 0;
+      }
+
+      button {
+        border: none;
+        border-radius: 6px;
+        padding: 7px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        background: #22c55e;
+        color: #022c22;
+      }
+
+      .results {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(31, 41, 55, 0.9);
+      }
+
+      .results-title {
+        font-size: 13px;
+        margin-bottom: 4px;
+      }
+
+      .results-meta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      table.results-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        margin-top: 4px;
+      }
+
+      table.results-table th,
+      table.results-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid rgba(31, 41, 55, 0.9);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      table.results-table th {
+        background: #020617;
+        color: var(--muted);
+        font-weight: 500;
+        font-size: 11px;
+      }
+
+      table.results-table tr:nth-child(even) td {
+        background: #02051a;
+      }
+
+      table.results-table a {
+        color: #93c5fd;
+        text-decoration: none;
+        word-break: break-all;
+      }
+
+      table.results-table a:hover {
+        text-decoration: underline;
+      }
+
+      .empty-state {
+        font-size: 13px;
+        color: var(--muted);
+        padding-top: 4px;
+      }
+
+      .error {
+        margin-top: 8px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(248, 113, 113, 0.6);
+        background: rgba(30, 64, 175, 0.12);
+        color: #fecaca;
+        font-size: 13px;
+      }
+
+      .checkbox-cell {
+        width: 30px;
+        text-align: center;
+      }
+
+      .checkbox-cell input[type="checkbox"] {
+        cursor: pointer;
+        width: 16px;
+        height: 16px;
+      }
+
+      .selection-controls {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+        align-items: center;
+      }
+
+      .selection-controls button {
+        padding: 6px 10px;
+        font-size: 12px;
+        background: #1f2937;
+        color: var(--text);
+      }
+
+      .selection-controls button:hover {
+        background: #374151;
+      }
+
+      .scrape-button {
+        background: #3b82f6 !important;
+        color: white !important;
+        font-weight: 500;
+      }
+
+      .scrape-button:hover {
+        background: #2563eb !important;
+      }
+
+      .selected-count {
+        font-size: 12px;
+        color: var(--muted);
+        margin-left: auto;
+      }
+
+      .progress-container {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 6px;
+        background: rgba(34, 197, 94, 0.1);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        display: none;
+      }
+
+      .progress-container.active {
+        display: block;
+      }
+
+      .progress-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .progress-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text);
+      }
+
+      .progress-status {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .progress-bar-container {
+        width: 100%;
+        height: 8px;
+        background: rgba(31, 41, 55, 0.9);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+
+      .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #22c55e, #16a34a);
+        transition: width 0.3s ease;
+        width: 0%;
+      }
+
+      .progress-details {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+
+      .progress-url-list {
+        margin-top: 8px;
+        font-size: 11px;
+      }
+
+      .progress-url-item {
+        padding: 4px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .progress-url-status {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+
+      .progress-url-status.pending {
+        background: #6b7280;
+      }
+
+      .progress-url-status.scraping {
+        background: #3b82f6;
+        animation: pulse 1.5s infinite;
+      }
+
+      .progress-url-status.completed {
+        background: #22c55e;
+      }
+
+      .progress-url-status.error {
+        background: #ef4444;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="shell-header">
+        <div class="shell-title">Industry website finder</div>
+        <div class="shell-subtitle">
+          Select an industry to see relevant websites.
+        </div>
+      </div>
+
+      <div class="shell-body">
+        <form method="post">
+          <div class="field-group">
+            <label for="industry">Industry</label>
+            <select id="industry" name="industry" required>
+              <option value="">Select…</option>
+              {% for industry in industries %}
+              <option
+                value="{{ industry }}"
+                {% if selected_industry == industry %}selected{% endif %}
+              >
+                {{ industry }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="service">Service</label>
+            <input
+              id="service"
+              name="service"
+              type="text"
+              value="{{ selected_service or '' }}"
+              placeholder="e.g. SEO, consulting"
+              style="
+                width: 100%;
+                padding: 6px 8px;
+                border-radius: 6px;
+                border: 1px solid rgba(51, 65, 85, 0.9);
+                background: #020617;
+                color: var(--text);
+                font-size: 13px;
+                outline: none;
+              "
+            />
+          </div>
+          <div class="field-group">
+            <label for="location">Location</label>
+            <input
+              id="location"
+              name="location"
+              type="text"
+              value="{{ selected_location or '' }}"
+              placeholder="City/region"
+              style="
+                width: 100%;
+                padding: 6px 8px;
+                border-radius: 6px;
+                border: 1px solid rgba(51, 65, 85, 0.9);
+                background: #020617;
+                color: var(--text);
+                font-size: 13px;
+                outline: none;
+              "
+            />
+          </div>
+          <div class="field-group">
+            <label for="country">Country</label>
+            <input
+              id="country"
+              name="country"
+              type="text"
+              value="{{ selected_country or '' }}"
+              placeholder="Country"
+              style="
+                width: 100%;
+                padding: 6px 8px;
+                border-radius: 6px;
+                border: 1px solid rgba(51, 65, 85, 0.9);
+                background: #020617;
+                color: var(--text);
+                font-size: 13px;
+                outline: none;
+              "
+            />
+          </div>
+          <div class="field-group">
+            <label for="place">Place</label>
+            <input
+              id="place"
+              name="place"
+              type="text"
+              value="{{ selected_place or '' }}"
+              placeholder="Neighborhood / area"
+              style="
+                width: 100%;
+                padding: 6px 8px;
+                border-radius: 6px;
+                border: 1px solid rgba(51, 65, 85, 0.9);
+                background: #020617;
+                color: var(--text);
+                font-size: 13px;
+                outline: none;
+              "
+            />
+          </div>
+
+          <input type="hidden" name="page" value="{{ page or 1 }}" />
+
+          <div class="submit-group">
+            <button type="submit" name="action" value="search">Search</button>
+          </div>
+        </form>
+
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-header">
+            <div class="progress-title">Scraping Progress</div>
+            <div class="progress-status" id="progressStatus">Initializing...</div>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+          <div class="progress-details" id="progressDetails"></div>
+          <div class="progress-url-list" id="progressUrlList"></div>
+        </div>
+
+        <div class="results">
+          <div class="results-title">
+            {% if selected_industry %} Websites for
+            <strong>{{ selected_industry }}</strong> {% else %} Results {% endif
+            %}
+          </div>
+
+          {% if total_results is not none %}
+          <div class="results-meta">
+            Showing page {{ page }}{% if total_pages %} of {{ total_pages }}{%
+            endif %} ({{ total_results }} results)
+          </div>
+          {% endif %}
+
+          {% if websites %}
+          <div class="selection-controls">
+            <button type="button" onclick="selectAll()" style="background: #1f2937; color: var(--text); padding: 6px 10px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer;">
+              Select All
+            </button>
+            <button type="button" onclick="deselectAll()" style="background: #1f2937; color: var(--text); padding: 6px 10px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer;">
+              Deselect All
+            </button>
+            <span class="selected-count" id="selectedCount">0 selected</span>
+          </div>
+
+          <form method="post" id="scrapeForm" style="margin-bottom: 8px;">
+            <input
+              type="hidden"
+              name="industry"
+              value="{{ selected_industry or '' }}"
+            />
+            <input
+              type="hidden"
+              name="service"
+              value="{{ selected_service or '' }}"
+            />
+            <input
+              type="hidden"
+              name="location"
+              value="{{ selected_location or '' }}"
+            />
+            <input
+              type="hidden"
+              name="country"
+              value="{{ selected_country or '' }}"
+            />
+            <input type="hidden" name="place" value="{{ selected_place or '' }}" />
+            <input type="hidden" name="page" value="{{ page or 1 }}" />
+            
+            <table class="results-table">
+              <thead>
+                <tr>
+                  <th class="checkbox-cell">Select</th>
+                  <th style="width: 55%">Website</th>
+                  <th style="width: 35%">Preview</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for site in websites %}
+                <tr>
+                  <td class="checkbox-cell">
+                    <input
+                      type="checkbox"
+                      name="selected_urls"
+                      value="{{ site }}"
+                      onchange="updateSelectedCount()"
+                    />
+                  </td>
+                  <td>
+                    <a href="{{ site }}" target="_blank" rel="noopener noreferrer">
+                      {{ site }}
+                    </a>
+                  </td>
+                  <td>
+                    {{
+                    site
+                    |replace("https://", "")
+                    |replace("http://", "")
+                    |truncate(50, True, "…")
+                    }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+
+            <div style="margin-top: 8px;">
+              <button
+                type="submit"
+                name="action"
+                value="scrape"
+                class="scrape-button"
+                onclick="return confirmScrape()"
+              >
+                Scrape Selected URLs
+              </button>
+              <button
+                type="submit"
+                name="action"
+                value="export"
+                style="margin-left: 8px; background: #111827; color: var(--text);"
+              >
+                Export All to CSV
+              </button>
+            </div>
+          </form>
+          <form method="post" style="margin-top: 6px; display: flex; gap: 6px;">
+            <input
+              type="hidden"
+              name="industry"
+              value="{{ selected_industry or '' }}"
+            />
+            <input
+              type="hidden"
+              name="service"
+              value="{{ selected_service or '' }}"
+            />
+            <input
+              type="hidden"
+              name="location"
+              value="{{ selected_location or '' }}"
+            />
+            <input
+              type="hidden"
+              name="country"
+              value="{{ selected_country or '' }}"
+            />
+            <input
+              type="hidden"
+              name="place"
+              value="{{ selected_place or '' }}"
+            />
+            <input type="hidden" name="action" value="search" />
+
+            <button
+              type="submit"
+              name="page"
+              value="{{ page - 1 }}"
+              {% if not total_pages or page <= 1 %}disabled{% endif %}
+              style="background: #111827; color: var(--text);"
+            >
+              Prev
+            </button>
+            <button
+              type="submit"
+              name="page"
+              value="{{ page + 1 }}"
+              {% if not total_pages or page >= total_pages %}disabled{% endif %}
+              style="background: #111827; color: var(--text);"
+            >
+              Next
+            </button>
+          </form>
+          {% else %}
+          <div class="empty-state">
+            {% if selected_industry %}
+            No websites were found for this industry.
+            {% else %}
+            Choose an industry above and click Search to see websites.
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function selectAll() {
+        const checkboxes = document.querySelectorAll('input[name="selected_urls"]');
+        checkboxes.forEach(cb => cb.checked = true);
+        updateSelectedCount();
+      }
+
+      function deselectAll() {
+        const checkboxes = document.querySelectorAll('input[name="selected_urls"]');
+        checkboxes.forEach(cb => cb.checked = false);
+        updateSelectedCount();
+      }
+
+      function updateSelectedCount() {
+        const checkboxes = document.querySelectorAll('input[name="selected_urls"]:checked');
+        const count = checkboxes.length;
+        document.getElementById('selectedCount').textContent = count + ' selected';
+      }
+
+      function confirmScrape() {
+        const checkboxes = document.querySelectorAll('input[name="selected_urls"]:checked');
+        if (checkboxes.length === 0) {
+          alert('Please select at least one website to scrape.');
+          return false;
+        }
+        // Show progress container
+        document.getElementById('progressContainer').classList.add('active');
+        // Start polling for progress
+        startProgressPolling();
+        return true;
+      }
+
+      function startProgressPolling() {
+        const progressInterval = setInterval(async () => {
+          try {
+            const response = await fetch('/api/progress');
+            const progress = await response.json();
+            updateProgressUI(progress);
+            
+            // Stop polling if scraping is completed or error
+            if (progress.status === 'completed' || progress.status === 'error') {
+              clearInterval(progressInterval);
+              // Hide progress after 5 seconds
+              setTimeout(() => {
+                document.getElementById('progressContainer').classList.remove('active');
+              }, 5000);
+            }
+          } catch (error) {
+            console.error('Error fetching progress:', error);
+          }
+        }, 1000); // Poll every second
+      }
+
+      function updateProgressUI(progress) {
+        // Update progress bar
+        const percentage = progress.total > 0 
+          ? Math.round((progress.completed / progress.total) * 100) 
+          : 0;
+        document.getElementById('progressBar').style.width = percentage + '%';
+        
+        // Update status text
+        const statusText = progress.status === 'running' 
+          ? `Scraping... ${progress.completed}/${progress.total} completed`
+          : progress.status === 'completed'
+          ? `Completed! ${progress.completed}/${progress.total} websites`
+          : progress.status === 'error'
+          ? 'Error occurred'
+          : 'Idle';
+        document.getElementById('progressStatus').textContent = statusText;
+        
+        // Update details
+        const details = progress.current_url 
+          ? `Current: ${progress.current_url.substring(0, 50)}...`
+          : progress.message || '';
+        document.getElementById('progressDetails').textContent = details;
+        
+        // Update URL list
+        const urlList = document.getElementById('progressUrlList');
+        urlList.innerHTML = '';
+        if (progress.urls && progress.urls.length > 0) {
+          progress.urls.forEach(url => {
+            const status = progress.url_status[url] || 'pending';
+            const urlItem = document.createElement('div');
+            urlItem.className = 'progress-url-item';
+            urlItem.innerHTML = `
+              <span class="progress-url-status ${status}"></span>
+              <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${url}</span>
+              <span style="color: var(--muted); font-size: 10px;">${status}</span>
+            `;
+            urlList.appendChild(urlItem);
+          });
+        }
+      }
+
+      // Initialize count on page load
+      document.addEventListener('DOMContentLoaded', updateSelectedCount);
+    </script>
+  </body>
+</html>
+
+
