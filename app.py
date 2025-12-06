@@ -70,8 +70,21 @@ def get_websites_for_filters(
             "See README.md for detailed setup instructions."
         )
 
-    # Build a concise search query from all filters.
-    parts = [industry, service, location, country, place, "companies official websites"]
+    # Build a search query specifically for lawyers and law firms
+    parts = []
+    if industry:
+        parts.append(f"{industry} lawyer")
+    if service:
+        parts.append(service)
+    if location:
+        parts.append(location)
+    if country:
+        parts.append(country)
+    if place:
+        parts.append(place)
+    # Always include law firm/lawyer keywords
+    parts.append("law firm")
+    parts.append("attorney")
     query = " ".join(p for p in parts if p).strip()
 
     # Google CSE supports pagination via the "start" parameter (1-based index).
@@ -194,24 +207,30 @@ def build_csv_for_websites(websites: List[str]) -> str:
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    industries = [
-        "Technology",
-        "Healthcare",
-        "Finance",
-        "Education",
-        "E-commerce",
-        "Real Estate",
-        "Travel & Tourism",
-        "Automotive",
-        "Media & Entertainment",
-        "Energy",
+    # Practice areas for lawyers
+    practice_areas = [
+        "Criminal Law",
+        "Corporate Law",
+        "Family Law",
+        "Personal Injury",
+        "Real Estate Law",
+        "Immigration Law",
+        "Intellectual Property",
+        "Employment Law",
+        "Tax Law",
+        "Estate Planning",
+        "Bankruptcy Law",
+        "Medical Malpractice",
+        "Immigration",
+        "DUI/DWI",
+        "Workers Compensation",
     ]
 
-    selected_industry = ""
-    selected_service = ""
+    selected_practice_area = ""
     selected_location = ""
+    selected_city = ""
+    selected_state = ""
     selected_country = ""
-    selected_place = ""
     page = 1
 
     websites: List[str] = []
@@ -219,11 +238,11 @@ def index():
     error: str | None = None
 
     if request.method == "POST":
-        selected_industry = request.form.get("industry", "").strip()
-        selected_service = request.form.get("service", "").strip()
+        selected_practice_area = request.form.get("practice_area", "").strip()
         selected_location = request.form.get("location", "").strip()
+        selected_city = request.form.get("city", "").strip()
+        selected_state = request.form.get("state", "").strip()
         selected_country = request.form.get("country", "").strip()
-        selected_place = request.form.get("place", "").strip()
         page_str = request.form.get("page") or "1"
         action = request.form.get("action", "search")
 
@@ -233,27 +252,31 @@ def index():
             page = 1
 
         try:
-            if not selected_industry:
-                error = "Please select an industry."
+            if not selected_practice_area:
+                error = "Please select a practice area."
             else:
+                # Combine location fields
+                location_parts = [selected_city, selected_state, selected_location, selected_country]
+                location_str = " ".join(p for p in location_parts if p).strip()
+                
                 websites, total_results = get_websites_for_filters(
-                    selected_industry,
-                    selected_service,
-                    selected_location,
+                    selected_practice_area,
+                    "",  # service (not used for lawyers)
+                    location_str,
                     selected_country,
-                    selected_place,
+                    "",  # place (not used)
                     page=page,
                 )
                 if action == "scrape" and websites:
                     # Get selected URLs from form
                     selected_urls = request.form.getlist("selected_urls")
                     if not selected_urls:
-                        error = "Please select at least one website to scrape."
+                        error = "Please select at least one law firm website to scrape."
                     else:
                         # Reset progress before starting
                         reset_progress()
                         csv_data = build_csv_for_websites(selected_urls)
-                        filename = f"scraped_websites_{selected_industry.replace(' ', '_').lower()}.csv"
+                        filename = f"law_firms_{selected_practice_area.replace(' ', '_').lower()}_{location_str.replace(' ', '_').lower() or 'all'}.csv"
                         return Response(
                             csv_data,
                             mimetype="text/csv",
@@ -263,7 +286,7 @@ def index():
                         )
                 elif action == "export" and websites:
                     csv_data = build_csv_for_websites(websites)
-                    filename = f"websites_{selected_industry.replace(' ', '_').lower()}.csv"
+                    filename = f"law_firms_{selected_practice_area.replace(' ', '_').lower()}.csv"
                     return Response(
                         csv_data,
                         mimetype="text/csv",
@@ -272,7 +295,7 @@ def index():
                         },
                     )
         except Exception as exc:  # noqa: BLE001
-            error = f"Failed to fetch websites for {selected_industry}: {exc}"
+            error = f"Failed to fetch law firm websites: {exc}"
 
     page_size = 10
     total_pages = (
@@ -281,12 +304,12 @@ def index():
 
     return render_template(
         "index.html",
-        industries=industries,
-        selected_industry=selected_industry,
-        selected_service=selected_service,
+        practice_areas=practice_areas,
+        selected_practice_area=selected_practice_area,
         selected_location=selected_location,
+        selected_city=selected_city,
+        selected_state=selected_state,
         selected_country=selected_country,
-        selected_place=selected_place,
         websites=websites,
         error=error,
         page=page,

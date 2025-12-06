@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Industry Website Finder</title>
+    <title>Law Firm & Lawyer Finder</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -320,36 +320,36 @@
   <body>
     <div class="shell">
       <div class="shell-header">
-        <div class="shell-title">Industry website finder</div>
+        <div class="shell-title">Law Firm & Lawyer Finder</div>
         <div class="shell-subtitle">
-          Select an industry to see relevant websites.
+          Search for law firms and attorneys by practice area and location.
         </div>
       </div>
 
       <div class="shell-body">
         <form method="post">
           <div class="field-group">
-            <label for="industry">Industry</label>
-            <select id="industry" name="industry" required>
-              <option value="">Select…</option>
-              {% for industry in industries %}
+            <label for="practice_area">Practice Area</label>
+            <select id="practice_area" name="practice_area" required>
+              <option value="">Select practice area…</option>
+              {% for area in practice_areas %}
               <option
-                value="{{ industry }}"
-                {% if selected_industry == industry %}selected{% endif %}
+                value="{{ area }}"
+                {% if selected_practice_area == area %}selected{% endif %}
               >
-                {{ industry }}
+                {{ area }}
               </option>
               {% endfor %}
             </select>
           </div>
           <div class="field-group">
-            <label for="service">Service</label>
+            <label for="city">City</label>
             <input
-              id="service"
-              name="service"
+              id="city"
+              name="city"
               type="text"
-              value="{{ selected_service or '' }}"
-              placeholder="e.g. SEO, consulting"
+              value="{{ selected_city or '' }}"
+              placeholder="e.g. New York, Los Angeles"
               style="
                 width: 100%;
                 padding: 6px 8px;
@@ -363,13 +363,13 @@
             />
           </div>
           <div class="field-group">
-            <label for="location">Location</label>
+            <label for="state">State / Province</label>
             <input
-              id="location"
-              name="location"
+              id="state"
+              name="state"
               type="text"
-              value="{{ selected_location or '' }}"
-              placeholder="City/region"
+              value="{{ selected_state or '' }}"
+              placeholder="e.g. California, NY, Ontario"
               style="
                 width: 100%;
                 padding: 6px 8px;
@@ -389,7 +389,7 @@
               name="country"
               type="text"
               value="{{ selected_country or '' }}"
-              placeholder="Country"
+              placeholder="e.g. USA, Canada, UK"
               style="
                 width: 100%;
                 padding: 6px 8px;
@@ -403,13 +403,13 @@
             />
           </div>
           <div class="field-group">
-            <label for="place">Place</label>
+            <label for="location">Additional Location</label>
             <input
-              id="place"
-              name="place"
+              id="location"
+              name="location"
               type="text"
-              value="{{ selected_place or '' }}"
-              placeholder="Neighborhood / area"
+              value="{{ selected_location or '' }}"
+              placeholder="Additional location details (optional)"
               style="
                 width: 100%;
                 padding: 6px 8px;
@@ -426,7 +426,7 @@
           <input type="hidden" name="page" value="{{ page or 1 }}" />
 
           <div class="submit-group">
-            <button type="submit" name="action" value="search">Search</button>
+            <button type="submit" name="action" value="search">Search Law Firms</button>
           </div>
         </form>
 
@@ -449,8 +449,8 @@
 
         <div class="results">
           <div class="results-title">
-            {% if selected_industry %} Websites for
-            <strong>{{ selected_industry }}</strong> {% else %} Results {% endif
+            {% if selected_practice_area %} Law Firms for
+            <strong>{{ selected_practice_area }}</strong> {% else %} Results {% endif
             %}
           </div>
 
@@ -475,13 +475,8 @@
           <form method="post" id="scrapeForm" style="margin-bottom: 8px;">
             <input
               type="hidden"
-              name="industry"
-              value="{{ selected_industry or '' }}"
-            />
-            <input
-              type="hidden"
-              name="service"
-              value="{{ selected_service or '' }}"
+              name="practice_area"
+              value="{{ selected_practice_area or '' }}"
             />
             <input
               type="hidden"
@@ -490,10 +485,19 @@
             />
             <input
               type="hidden"
+              name="city"
+              value="{{ selected_city or '' }}"
+            />
+            <input
+              type="hidden"
+              name="state"
+              value="{{ selected_state or '' }}"
+            />
+            <input
+              type="hidden"
               name="country"
               value="{{ selected_country or '' }}"
             />
-            <input type="hidden" name="place" value="{{ selected_place or '' }}" />
             <input type="hidden" name="page" value="{{ page or 1 }}" />
             
             <table class="results-table">
@@ -541,7 +545,7 @@
                 class="scrape-button"
                 onclick="return confirmScrape()"
               >
-                Scrape Selected URLs
+                Scrape Selected Law Firms
               </button>
               <button
                 type="submit"
@@ -556,13 +560,8 @@
           <form method="post" style="margin-top: 6px; display: flex; gap: 6px;">
             <input
               type="hidden"
-              name="industry"
-              value="{{ selected_industry or '' }}"
-            />
-            <input
-              type="hidden"
-              name="service"
-              value="{{ selected_service or '' }}"
+              name="practice_area"
+              value="{{ selected_practice_area or '' }}"
             />
             <input
               type="hidden"
@@ -571,13 +570,18 @@
             />
             <input
               type="hidden"
-              name="country"
-              value="{{ selected_country or '' }}"
+              name="city"
+              value="{{ selected_city or '' }}"
             />
             <input
               type="hidden"
-              name="place"
-              value="{{ selected_place or '' }}"
+              name="state"
+              value="{{ selected_state or '' }}"
+            />
+            <input
+              type="hidden"
+              name="country"
+              value="{{ selected_country or '' }}"
             />
             <input type="hidden" name="action" value="search" />
 
@@ -602,10 +606,10 @@
           </form>
           {% else %}
           <div class="empty-state">
-            {% if selected_industry %}
-            No websites were found for this industry.
+            {% if selected_practice_area %}
+            No law firms were found for this practice area and location.
             {% else %}
-            Choose an industry above and click Search to see websites.
+            Choose a practice area above and click Search to find law firms.
             {% endif %}
           </div>
           {% endif %}

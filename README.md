@@ -1,8 +1,8 @@
-## Industry Website Finder (Flask + Scrapy + Google Custom Search)
+## Law Firm & Lawyer Finder (Flask + Scrapy + Google Custom Search)
 
-This is a Flask application that uses Google Custom Search API to find company websites
-based on industry, service, location, and other filters. It then uses Scrapy to scrape
-those websites for contact information (emails, phones, PDFs, images, etc.).
+This is a Flask application that uses Google Custom Search API to find law firm websites
+and attorney information based on practice area, location, and other filters. It then uses 
+Scrapy to scrape those websites for contact information (emails, phones, PDFs, images, etc.).
 
 ### Setup
 
@@ -69,18 +69,19 @@ those websites for contact information (emails, phones, PDFs, images, etc.).
 
 ### How it works
 
-- The main Flask endpoint (`/`) renders a UI where you can select an industry and
-  optionally add filters (service, location, country, place).
+- The main Flask endpoint (`/`) renders a UI where you can select a practice area
+  (e.g., Criminal Law, Corporate Law) and optionally add location filters (city, state, country).
 - When you submit the form, the app uses Google Custom Search API to find relevant
-  company websites based on your filters.
-- When you click "Export CSV", it uses Scrapy to concurrently scrape all found
+  law firm and attorney websites based on your filters.
+- You can select specific law firm websites and click "Scrape Selected Law Firms" to extract data.
+- When you click "Scrape Selected Law Firms", it uses Scrapy to concurrently scrape all selected
   websites for:
   - Email addresses
   - Phone numbers
   - vCard links
   - PDF links
   - Image links
-- The results are exported as a CSV file.
+- The results are exported as a CSV file with all contact information.
 
 ### Features
 
