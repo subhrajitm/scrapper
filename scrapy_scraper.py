@@ -52,8 +52,10 @@ class ItemsCollectorPipeline:
                 'emails': set(),
                 'phones': set(),
                 'vcard_links': set(),
+                'vcard_files': [],  # List of dicts
                 'pdf_links': set(),
                 'image_links': set(),
+                'lawyer_profiles': [],  # List of profile dicts
             }
         
         # Aggregate data
@@ -64,7 +66,23 @@ class ItemsCollectorPipeline:
         data['pdf_links'].update(item.get('pdf_links', []))
         data['image_links'].update(item.get('image_links', []))
         
-        print(f"After aggregation for {website}: {len(data['emails'])} emails, {len(data['phones'])} phones")
+        # Aggregate vCard files (avoid duplicates by URL)
+        vcard_files = item.get('vcard_files', [])
+        existing_vcard_urls = {v.get('url') for v in data['vcard_files']}
+        for vcard_file in vcard_files:
+            if isinstance(vcard_file, dict) and vcard_file.get('url') not in existing_vcard_urls:
+                data['vcard_files'].append(vcard_file)
+                existing_vcard_urls.add(vcard_file.get('url'))
+        
+        # Aggregate lawyer profiles (avoid duplicates by profile_url)
+        lawyer_profiles = item.get('lawyer_profiles', [])
+        existing_profile_urls = {p.get('profile_url') for p in data['lawyer_profiles']}
+        for profile in lawyer_profiles:
+            if isinstance(profile, dict) and profile.get('profile_url') not in existing_profile_urls:
+                data['lawyer_profiles'].append(profile)
+                existing_profile_urls.add(profile.get('profile_url'))
+        
+        print(f"After aggregation for {website}: {len(data['emails'])} emails, {len(data['phones'])} phones, {len(data['vcard_files'])} vCard files, {len(data['lawyer_profiles'])} profiles")
         return item
     
     def close_spider(self, spider):
@@ -78,10 +96,12 @@ class ItemsCollectorPipeline:
                     'emails': sorted(list(data['emails'])),
                     'phones': sorted(list(data['phones'])),
                     'vcard_links': sorted(list(data['vcard_links'])),
+                    'vcard_files': data['vcard_files'],  # List of dicts with url, content (base64), size
                     'pdf_links': sorted(list(data['pdf_links'])),
                     'image_links': sorted(list(data['image_links'])),
+                    'lawyer_profiles': data['lawyer_profiles'],  # List of profile dicts
                 }
-                print(f"Final item for {website}: {len(final_item['emails'])} emails, {len(final_item['phones'])} phones")
+                print(f"Final item for {website}: {len(final_item['emails'])} emails, {len(final_item['phones'])} phones, {len(final_item['vcard_files'])} vCard files, {len(final_item['lawyer_profiles'])} profiles")
                 scraped_items.append(final_item)
                 # Update progress - mark URL as completed
                 update_progress(url_status=(website, 'completed'))

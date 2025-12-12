@@ -511,6 +511,9 @@
         <button type="submit" name="action" value="search" class="search-button">
           Find it now
         </button>
+        <button type="button" onclick="showListImporter()" class="search-button" style="background: #48BB78; margin-left: 8px;">
+          📋 Import from List
+        </button>
         <input type="hidden" name="city" value="{{ selected_city or '' }}" />
         <input type="hidden" name="state" value="{{ selected_state or '' }}" />
         <input type="hidden" name="country" value="{{ selected_country or '' }}" />
@@ -732,6 +735,89 @@
       }
 
       document.addEventListener('DOMContentLoaded', updateSelectedCount);
+
+      // List Importer Modal
+      function showListImporter() {
+        document.getElementById('listImporterModal').style.display = 'flex';
+      }
+
+      function hideListImporter() {
+        document.getElementById('listImporterModal').style.display = 'none';
+        document.getElementById('listUrl').value = '';
+        document.getElementById('listText').value = '';
+      }
+
+      async function importFromList(event) {
+        event.preventDefault();
+        const listUrl = document.getElementById('listUrl').value.trim();
+        const listText = document.getElementById('listText').value.trim();
+        
+        if (!listUrl && !listText) {
+          alert('Please provide either a list URL or paste the list text');
+          return;
+        }
+
+        const importButton = event.target.querySelector('button[type="submit"]');
+        const originalText = importButton.textContent;
+        importButton.disabled = true;
+        importButton.textContent = 'Importing...';
+
+        try {
+          const response = await fetch('/import-list', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ listUrl, listText }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            alert(`Found ${data.count} law firm URL(s). You can now scrape them.`);
+            // Optionally reload the page or update the UI with found URLs
+            hideListImporter();
+            if (data.urls && data.urls.length > 0) {
+              // You could add these URLs to the search results or create a new form
+              console.log('Imported URLs:', data.urls);
+            }
+          } else {
+            alert('Error: ' + (data.error || 'Failed to import list'));
+          }
+        } catch (error) {
+          alert('Error importing list: ' + error.message);
+        } finally {
+          importButton.disabled = false;
+          importButton.textContent = originalText;
+        }
+      }
     </script>
+
+    <!-- List Importer Modal -->
+    <div id="listImporterModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+      <div style="background: white; padding: 24px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 700;">Import from External List</h2>
+          <button onclick="hideListImporter()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
+        </div>
+        <p style="color: #666; margin-bottom: 16px; font-size: 14px;">
+          Import law firm URLs from external sources like WSJ Top Ten lists, SuperLawyers lists, etc.
+        </p>
+        <form onsubmit="importFromList(event)">
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">List URL (optional):</label>
+            <input type="url" id="listUrl" placeholder="https://example.com/top-law-firms-2025" style="width: 100%; padding: 10px; border: 1px solid #E5E5E5; border-radius: 6px; font-size: 14px;" />
+          </div>
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">Or paste list text:</label>
+            <textarea id="listText" placeholder="Paste article content or list of law firm names/URLs here..." style="width: 100%; padding: 10px; border: 1px solid #E5E5E5; border-radius: 6px; font-size: 14px; min-height: 150px; resize: vertical;"></textarea>
+          </div>
+          <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button type="button" onclick="hideListImporter()" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Import URLs</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </body>
 </html>

@@ -9,6 +9,7 @@ from flask import Flask, render_template, request, Response, jsonify
 from dotenv import load_dotenv
 import requests
 from scrapy_scraper import scrape_websites_with_scrapy, get_scraping_progress, reset_progress
+from list_importer import search_from_list
 
 # Load environment variables from .env file
 load_dotenv()
@@ -135,21 +136,54 @@ def get_progress():
     return jsonify(progress)
 
 
+@app.route("/import-list", methods=["POST"])
+def import_list():
+    """API endpoint to import URLs from external lists (WSJ, SuperLawyers, etc.)"""
+    try:
+        data = request.get_json()
+        list_url = data.get('listUrl', '').strip()
+        list_text = data.get('listText', '').strip()
+        
+        if not list_url and not list_text:
+            return jsonify({'error': 'Please provide either a list URL or list text'}), 400
+        
+        urls, count = search_from_list(list_url=list_url if list_url else None, 
+                                       list_text=list_text if list_text else None)
+        
+        return jsonify({
+            'success': True,
+            'urls': urls,
+            'count': count,
+            'message': f'Found {count} law firm URL(s)'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 def build_csv_for_websites(websites: List[str]) -> str:
     """
     Scrape all given websites using Scrapy and return a CSV string with the results.
     This now uses Scrapy for concurrent, efficient scraping.
+    Creates multiple rows per website: one for each lawyer profile found.
     """
     output = io.StringIO()
     writer = csv.DictWriter(
         output,
         fieldnames=[
             "website",
-            "emails",
-            "phones",
+            "lawyer_name",
+            "lawyer_email",
+            "lawyer_phone",
+            "profile_url",
+            "profile_images",
+            "vcard_content",
+            "all_emails",
+            "all_phones",
             "vcard_links",
+            "vcard_files_count",
             "pdf_links",
             "image_links",
+            "lawyer_profiles_count",
         ],
     )
     writer.writeheader()
@@ -173,34 +207,69 @@ def build_csv_for_websites(websites: List[str]) -> str:
     # Create a dict mapping URLs to scraped data for quick lookup
     data_by_url = {item['website']: item for item in scraped_data}
     
-    # Write results - ensure all websites are included even if scraping failed
+    # Write results - create one row per lawyer profile, or one row for firm-level data if no profiles
     for site in websites:
         data = data_by_url.get(site, {
             'website': site,
             'emails': [],
             'phones': [],
             'vcard_links': [],
+            'vcard_files': [],
             'pdf_links': [],
             'image_links': [],
+            'lawyer_profiles': [],
         })
         
         # Ensure all fields are lists
         emails = data.get("emails", []) if isinstance(data.get("emails"), list) else []
         phones = data.get("phones", []) if isinstance(data.get("phones"), list) else []
         vcard_links = data.get("vcard_links", []) if isinstance(data.get("vcard_links"), list) else []
+        vcard_files = data.get("vcard_files", []) if isinstance(data.get("vcard_files"), list) else []
         pdf_links = data.get("pdf_links", []) if isinstance(data.get("pdf_links"), list) else []
         image_links = data.get("image_links", []) if isinstance(data.get("image_links"), list) else []
+        lawyer_profiles = data.get("lawyer_profiles", []) if isinstance(data.get("lawyer_profiles"), list) else []
         
-        writer.writerow(
-            {
-                "website": data["website"],
-                "emails": "; ".join(str(e) for e in emails),
-                "phones": "; ".join(str(p) for p in phones),
-                "vcard_links": "; ".join(str(v) for v in vcard_links),
-                "pdf_links": "; ".join(str(p) for p in pdf_links),
-                "image_links": "; ".join(str(i) for i in image_links),
-            }
-        )
+        # Write one row per lawyer profile
+        if lawyer_profiles:
+            for profile in lawyer_profiles:
+                writer.writerow(
+                    {
+                        "website": data["website"],
+                        "lawyer_name": profile.get("lawyer_name", ""),
+                        "lawyer_email": profile.get("lawyer_email", ""),
+                        "lawyer_phone": profile.get("lawyer_phone", ""),
+                        "profile_url": profile.get("profile_url", ""),
+                        "profile_images": "; ".join(profile.get("profile_images", [])),
+                        "vcard_content": profile.get("vcard_content", ""),  # Base64 encoded
+                        "all_emails": "; ".join(str(e) for e in emails),
+                        "all_phones": "; ".join(str(p) for p in phones),
+                        "vcard_links": "; ".join(str(v) for v in vcard_links),
+                        "vcard_files_count": len(vcard_files),
+                        "pdf_links": "; ".join(str(p) for p in pdf_links),
+                        "image_links": "; ".join(str(i) for i in image_links),
+                        "lawyer_profiles_count": len(lawyer_profiles),
+                    }
+                )
+        else:
+            # No profiles found, write firm-level data
+            writer.writerow(
+                {
+                    "website": data["website"],
+                    "lawyer_name": "",
+                    "lawyer_email": "",
+                    "lawyer_phone": "",
+                    "profile_url": "",
+                    "profile_images": "",
+                    "vcard_content": "",
+                    "all_emails": "; ".join(str(e) for e in emails),
+                    "all_phones": "; ".join(str(p) for p in phones),
+                    "vcard_links": "; ".join(str(v) for v in vcard_links),
+                    "vcard_files_count": len(vcard_files),
+                    "pdf_links": "; ".join(str(p) for p in pdf_links),
+                    "image_links": "; ".join(str(i) for i in image_links),
+                    "lawyer_profiles_count": 0,
+                }
+            )
 
     return output.getvalue()
 
