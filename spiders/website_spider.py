@@ -2,11 +2,19 @@ import re
 import base64
 from urllib.parse import urljoin, urlparse
 from scrapy import Spider, Request
-from items import WebsiteItem, LawyerProfileItem
+from scrapy.exceptions import CloseSpider
+from items import WebsiteItem
 
 
 class WebsiteSpider(Spider):
     name = "website"
+
+    # Safety limit: don’t base64-encode extremely large responses.
+    MAX_VCARD_BYTES = 250_000  # 250KB
+
+    # Crawl safety limits to prevent “infinite” site walks on large firms.
+    MAX_TOTAL_PAGES = 400  # across the whole spider run
+    MAX_PAGES_PER_SITE = 200  # per base_url
     
     # Generic email patterns to filter out
     GENERIC_EMAIL_PATTERNS = [
@@ -22,8 +30,9 @@ class WebsiteSpider(Spider):
         'counsel', 'staff', 'professional', 'member'
     ]
     
-    def __init__(self, urls=None, *args, **kwargs):
+    def __init__(self, urls=None, job_id=None, *args, **kwargs):
         super(WebsiteSpider, self).__init__(*args, **kwargs)
+        self.job_id = job_id or "default"
         if urls:
             self.start_urls = urls if isinstance(urls, list) else [urls]
         else:
@@ -32,14 +41,58 @@ class WebsiteSpider(Spider):
         self.site_data = {}
         # Track which URLs we've processed
         self.processed_urls = set()
-        # Track downloaded vCard files
-        self.vcard_files = {}  # url -> {'content': base64, 'size': bytes}
+
+    def _visible_text(self, response) -> str:
+        """
+        Extract visible text from the page (excluding scripts/styles).
+        This reduces false positives from embedded JS/CSS and asset URLs.
+        """
+        texts = response.xpath(
+            "//body//text()[not(ancestor::script) and not(ancestor::style) and not(ancestor::noscript)]"
+        ).getall()
+        return " ".join(t.strip() for t in texts if t and t.strip())
+
+    def _normalize_phone(self, raw: str, *, from_tel: bool = False) -> str | None:
+        """Normalize and validate phone-ish strings into a compact form."""
+        if not raw:
+            return None
+
+        raw = raw.strip()
+        raw_no_tel = raw[4:] if raw.lower().startswith("tel:") else raw
+
+        # Reject bare long digit strings coming from page text; allow for tel: links.
+        raw_digits_only = re.sub(r"\D", "", raw_no_tel)
+        if not raw_digits_only:
+            return None
+
+        # Most real-world phone numbers are 10-15 digits (E.164 max is 15).
+        if len(raw_digits_only) < 10 or len(raw_digits_only) > 15:
+            return None
+
+        # Filter out obvious timestamps / IDs (common on websites).
+        if not from_tel and raw_no_tel.lstrip("+").isdigit():
+            return None
+
+        # Filter out nonsense repeats.
+        if raw_digits_only == raw_digits_only[0] * len(raw_digits_only):
+            return None
+
+        prefix_plus = raw_no_tel.strip().startswith("+")
+        return ("+" if prefix_plus else "") + raw_digits_only
     
     def start_requests(self):
         """Start requests for each URL"""
         if not self.start_urls:
             self.logger.warning("No start URLs provided!")
             return
+
+        # Respect stop/cancel requests.
+        try:
+            from scrapy_scraper import is_job_cancelled
+            if is_job_cancelled(self.job_id):
+                raise CloseSpider("cancelled")
+        except Exception:
+            pass
         
         for url in self.start_urls:
             base_url = url
@@ -52,14 +105,16 @@ class WebsiteSpider(Spider):
                 'pdf_links': set(),
                 'image_links': set(),
                 'lawyer_profiles': [],  # List of lawyer profile data
+                'pages_seen': 0,
             }
             # Update progress
             try:
                 from scrapy_scraper import update_progress
-                update_progress(current_url=base_url, url_status=(base_url, 'scraping'), message=f'Scraping {base_url}...')
+                update_progress(job_id=self.job_id, current_url=base_url, url_status=(base_url, 'scraping'), message=f'Scraping {base_url}...')
             except:
                 pass
-            yield Request(url, callback=self.parse, errback=self.errback, meta={'base_url': base_url, 'depth': 0}, dont_filter=True)
+            # Priority 0 = highest; all base URLs get processed first in parallel
+            yield Request(url, callback=self.parse, errback=self.errback, meta={'base_url': base_url, 'depth': 0}, dont_filter=True, priority=0)
     
     def errback(self, failure):
         """Handle request errors"""
@@ -69,7 +124,7 @@ class WebsiteSpider(Spider):
         # Update progress to show error
         try:
             from scrapy_scraper import update_progress
-            update_progress(url_status=(base_url, 'error'), message=f'Error scraping {base_url}: {str(failure.value)}')
+            update_progress(job_id=self.job_id, url_status=(base_url, 'error'), message=f'Error scraping {base_url}: {str(failure.value)}')
         except:
             pass
     
@@ -135,22 +190,28 @@ class WebsiteSpider(Spider):
         
         # Extract emails - filter out generic ones
         email_pattern = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-        emails = email_pattern.findall(response.text)
+        visible_text = self._visible_text(response)
+        emails = email_pattern.findall(visible_text)
         for email in emails:
             if not self._is_generic_email(email):
                 profile_data['lawyer_email'] = email
                 break  # Take first non-generic email
         
-        # Extract phones - prefer direct contact info
-        phone_patterns = [
-            r'\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',
-            r'\+?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}',
-        ]
-        for pattern in phone_patterns:
-            phones = re.findall(pattern, response.text)
-            if phones:
-                profile_data['lawyer_phone'] = phones[0].strip()
+        # Extract phones - prefer tel: links, then visible-text patterns.
+        tel_hrefs = response.css('a[href^="tel:"]::attr(href)').getall()
+        for href in tel_hrefs:
+            normalized = self._normalize_phone(href, from_tel=True)
+            if normalized:
+                profile_data['lawyer_phone'] = normalized
                 break
+
+        if not profile_data['lawyer_phone']:
+            phone_candidates = re.findall(r"\+?\d[\d\s().-]{7,}\d", visible_text)
+            for cand in phone_candidates:
+                normalized = self._normalize_phone(cand)
+                if normalized:
+                    profile_data['lawyer_phone'] = normalized
+                    break
         
         # Extract profile images
         img_selectors = [
@@ -191,10 +252,28 @@ class WebsiteSpider(Spider):
                 vcard_content = response.body
             else:
                 vcard_content = response.text.encode('utf-8')
+
+            if not vcard_content:
+                return
+
+            # Size guard (avoid storing huge/bogus responses)
+            vcard_size = len(vcard_content)
+            if vcard_size > self.MAX_VCARD_BYTES:
+                self.logger.warning(f"Skipping oversized vCard from {vcard_url} ({vcard_size} bytes)")
+                return
+
+            # Basic content validation (avoid HTML error pages)
+            head = vcard_content[:200].lstrip()
+            if b"BEGIN:VCARD" not in vcard_content[:4096] and head.startswith(b"<"):
+                self.logger.warning(f"Skipping non-vCard content from {vcard_url} (looks like HTML)")
+                return
+            if b"BEGIN:VCARD" not in vcard_content[:4096]:
+                # Not strictly required, but reduces junk dramatically.
+                self.logger.warning(f"Skipping non-vCard content from {vcard_url} (missing BEGIN:VCARD)")
+                return
             
             # Base64 encode for CSV storage
             vcard_base64 = base64.b64encode(vcard_content).decode('utf-8')
-            vcard_size = len(vcard_content)
             
             # Store vCard file info
             vcard_info = {
@@ -220,12 +299,35 @@ class WebsiteSpider(Spider):
             
         except Exception as e:
             self.logger.error(f"Error processing vCard {vcard_url}: {e}")
+
+        # Emit an updated item so the pipeline captures downloaded vCards even
+        # if no further HTML pages are parsed for this base_url.
+        data = self.site_data.get(base_url)
+        if data:
+            item = WebsiteItem()
+            item["website"] = base_url
+            item["emails"] = list(data.get("emails", []))
+            item["phones"] = list(data.get("phones", []))
+            item["vcard_links"] = list(data.get("vcard_links", []))
+            item["vcard_files"] = data.get("vcard_files", [])
+            item["pdf_links"] = list(data.get("pdf_links", []))
+            item["image_links"] = list(data.get("image_links", []))
+            item["lawyer_profiles"] = data.get("lawyer_profiles", [])
+            yield item
     
     def parse(self, response):
         """Parse the response and extract data"""
         base_url = response.meta.get('base_url', response.url)
         depth = response.meta.get('depth', 0)
         current_url = response.url
+
+        # Respect stop/cancel requests.
+        try:
+            from scrapy_scraper import is_job_cancelled
+            if is_job_cancelled(self.job_id):
+                raise CloseSpider("cancelled")
+        except Exception:
+            pass
         
         self.logger.info(f"Parsing {current_url} (depth: {depth}, base: {base_url})")
         
@@ -240,9 +342,36 @@ class WebsiteSpider(Spider):
                 'pdf_links': set(),
                 'image_links': set(),
                 'lawyer_profiles': [],
+                'pages_seen': 0,
             }
         
         data = self.site_data[base_url]
+
+        # Track pages visited and enforce safety limits.
+        data['pages_seen'] = int(data.get('pages_seen') or 0) + 1
+        total_pages_seen = len(self.processed_urls) if self.processed_urls else 0
+        cap_reached = (
+            data['pages_seen'] >= self.MAX_PAGES_PER_SITE
+            or total_pages_seen >= self.MAX_TOTAL_PAGES
+        )
+        if cap_reached:
+            # Don’t stop the spider abruptly; just stop enqueueing new requests.
+            data['cap_reached'] = True
+
+        # Periodically update progress with activity so the UI doesn't look stuck.
+        if data['pages_seen'] % 10 == 0:
+            try:
+                from scrapy_scraper import update_progress
+                update_progress(
+                    job_id=self.job_id,
+                    message=(
+                        f"Visited {data['pages_seen']} pages on {base_url}. "
+                        f"Profiles: {len(data.get('lawyer_profiles', []))}. "
+                        f"vCards: {len(data.get('vcard_files', []))}."
+                    ),
+                )
+            except Exception:
+                pass
         
         # Check if we got a valid response
         if response.status != 200:
@@ -264,21 +393,24 @@ class WebsiteSpider(Spider):
         else:
             # Extract general firm data
             email_pattern = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-            emails = email_pattern.findall(response.text)
+            visible_text = self._visible_text(response)
+            emails = email_pattern.findall(visible_text)
             if emails:
                 self.logger.info(f"Found {len(emails)} emails on {current_url}")
             data['emails'].update(emails)
             
             # Extract phones
-            phone_patterns = [
-                r'\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',
-                r'\+?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}',
-                r'\+?\d[\d\-\s()]{7,}\d',
-                r'\(\d{3}\)\s?\d{3}[-.\s]?\d{4}',
-            ]
-            for pattern in phone_patterns:
-                phones = re.findall(pattern, response.text)
-                data['phones'].update(phone.strip() for phone in phones)
+            tel_hrefs = response.css('a[href^="tel:"]::attr(href)').getall()
+            for href in tel_hrefs:
+                normalized = self._normalize_phone(href, from_tel=True)
+                if normalized:
+                    data["phones"].add(normalized)
+
+            phone_candidates = re.findall(r"\+?\d[\d\s().-]{7,}\d", visible_text)
+            for cand in phone_candidates:
+                normalized = self._normalize_phone(cand)
+                if normalized:
+                    data["phones"].add(normalized)
         
         # Extract all links from the page
         links = response.css('a::attr(href)').getall()
@@ -297,7 +429,8 @@ class WebsiteSpider(Spider):
                             full_url,
                             callback=self.parse_vcard,
                             meta={'base_url': base_url, 'profile_url': current_url if is_profile_page else None},
-                            dont_filter=True
+                            dont_filter=True,
+                            priority=depth + 2,  # Lower priority than page scraping
                         )
         
         # Extract PDF links
@@ -327,7 +460,7 @@ class WebsiteSpider(Spider):
                 data['image_links'].add(full_url)
         
         # Follow links to find more resources (increased depth to 3 for better profile discovery)
-        if depth < 3:
+        if depth < 3 and not data.get('cap_reached'):
             base_domain = urlparse(base_url).netloc
             current_domain = urlparse(response.url).netloc
             
@@ -346,18 +479,20 @@ class WebsiteSpider(Spider):
                             if (depth == 0 or profile_priority or 
                                 any(keyword in link_lower for keyword in ['contact', 'about', 'team', 'pdf', 'vcard', 'download', 'resources', 'media', 'gallery'])):
                                 self.processed_urls.add(full_url)
+                                # Priority increases with depth so base URLs of all sites finish first
                                 yield Request(
                                     full_url,
                                     callback=self.parse,
                                     meta={'base_url': base_url, 'depth': depth + 1},
-                                    dont_filter=False
+                                    dont_filter=False,
+                                    priority=depth + 1,
                                 )
         
         # Update progress when starting to scrape a base URL
         if depth == 0 and current_url == base_url:
             try:
                 from scrapy_scraper import update_progress
-                update_progress(current_url=base_url, url_status=(base_url, 'scraping'), message=f'Scraping {base_url}...')
+                update_progress(job_id=self.job_id, current_url=base_url, url_status=(base_url, 'scraping'), message=f'Scraping {base_url}...')
             except:
                 pass
         

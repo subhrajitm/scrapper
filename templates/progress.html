@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scraping Progress</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        background: #f7f7fb;
+        margin: 0;
+        padding: 24px;
+        color: #222;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e9e9ef;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 6px 18px rgba(15, 15, 20, 0.06);
+        margin-bottom: 20px;
+      }
+      .title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .title h1 {
+        font-size: 18px;
+        margin: 0;
+      }
+      .meta {
+        font-size: 12px;
+        color: #666;
+        word-break: break-all;
+      }
+      .bar-wrap {
+        height: 10px;
+        background: #eee;
+        border-radius: 999px;
+        overflow: hidden;
+        margin: 14px 0 10px;
+      }
+      .bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #4a90e2, #48bb78);
+        transition: width 0.2s ease;
+      }
+      .status {
+        font-weight: 700;
+        margin: 0 0 8px;
+      }
+      .details {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 10px;
+        min-height: 40px;
+      }
+      .sites-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .site-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .site-card.pending { border-left: 3px solid #94a3b8; }
+      .site-card.scraping { border-left: 3px solid #3b82f6; background: #eff6ff; }
+      .site-card.completed { border-left: 3px solid #22c55e; background: #f0fdf4; }
+      .site-card.error { border-left: 3px solid #ef4444; background: #fef2f2; }
+      .site-icon { font-size: 12px; flex-shrink: 0; }
+      .site-url {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+      }
+      button, a.btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid #d8d8e3;
+        background: #fff;
+        cursor: pointer;
+        text-decoration: none;
+        color: #222;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      button.primary, a.btn.primary { background: #4a90e2; border-color: #4a90e2; color: #fff; }
+      button.danger { background: #ef4444; border-color: #ef4444; color: #fff; }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+      /* Results Table */
+      .results-section {
+        margin-top: 0;
+      }
+      .results-section h2 {
+        font-size: 16px;
+        margin: 0 0 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .results-section h2 .count {
+        background: #4a90e2;
+        color: #fff;
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 12px;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        max-height: 500px;
+        overflow-y: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th, td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      th {
+        background: #f8fafc;
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+      }
+      tr:hover { background: #f8fafc; }
+      td {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      td a {
+        color: #3b82f6;
+        text-decoration: none;
+      }
+      td a:hover { text-decoration: underline; }
+      .empty-msg {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <div class="title">
+          <h1>Scraping Progress</h1>
+          <a class="btn" href="/">Back</a>
+        </div>
+        <div class="meta">Job: <span id="jobId">{{ job_id }}</span></div>
+        <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+        <p class="status" id="status">Initializing...</p>
+        <div class="details" id="details"></div>
+
+        <div class="sites-grid" id="sitesGrid"></div>
+
+        <div class="actions">
+          <button class="danger" id="stopBtn" onclick="stopJob()">Stop</button>
+          <a class="btn primary" id="downloadBtn" href="#" onclick="return false;">Download CSV</a>
+        </div>
+      </div>
+
+      <div class="card results-section">
+        <h2>Scraped Data <span class="count" id="rowCount">0</span></h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Website</th>
+                <th>Lawyer Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Profile URL</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody">
+              <tr><td colspan="5" class="empty-msg">No data yet...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const jobId = document.getElementById('jobId').textContent.trim();
+      const statusEl = document.getElementById('status');
+      const detailsEl = document.getElementById('details');
+      const barEl = document.getElementById('bar');
+      const stopBtn = document.getElementById('stopBtn');
+      const downloadBtn = document.getElementById('downloadBtn');
+      const sitesGrid = document.getElementById('sitesGrid');
+      const resultsBody = document.getElementById('resultsBody');
+      const rowCountEl = document.getElementById('rowCount');
+
+      let isFinished = false;
+
+      function setDownloadEnabled(enabled) {
+        if (enabled) {
+          downloadBtn.href = `/download/${jobId}.csv`;
+          downloadBtn.onclick = null;
+        } else {
+          downloadBtn.href = '#';
+          downloadBtn.onclick = () => false;
+        }
+      }
+
+      function statusIcon(st) {
+        if (st === 'scraping') return '🔄';
+        if (st === 'completed') return '✅';
+        if (st === 'error') return '❌';
+        return '⏳';
+      }
+
+      function renderSites(urlStatus, urls) {
+        if (!urls || urls.length === 0) {
+          sitesGrid.innerHTML = '';
+          return;
+        }
+        sitesGrid.innerHTML = urls.map(url => {
+          const st = (urlStatus && urlStatus[url]) || 'pending';
+          const shortUrl = url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 35);
+          return `<div class="site-card ${st}">
+            <span class="site-icon">${statusIcon(st)}</span>
+            <span class="site-url" title="${url}">${shortUrl}</span>
+          </div>`;
+        }).join('');
+      }
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+
+      function renderResults(rows) {
+        rowCountEl.textContent = rows.length;
+        if (!rows || rows.length === 0) {
+          resultsBody.innerHTML = '<tr><td colspan="5" class="empty-msg">No data yet...</td></tr>';
+          return;
+        }
+        resultsBody.innerHTML = rows.map(r => {
+          const site = escapeHtml(r.website || '');
+          const shortSite = site.replace(/^https?:\/\/(www\.)?/, '').slice(0, 30);
+          const name = escapeHtml(r.lawyer_name || '—');
+          const email = escapeHtml(r.lawyer_email || '—');
+          const phone = escapeHtml(r.lawyer_phone || '—');
+          const profileUrl = r.profile_url || '';
+          const shortProfile = profileUrl ? profileUrl.replace(/^https?:\/\/(www\.)?/, '').slice(0, 35) : '—';
+          return `<tr>
+            <td title="${site}">${shortSite}</td>
+            <td>${name}</td>
+            <td>${email}</td>
+            <td>${phone}</td>
+            <td>${profileUrl ? `<a href="${escapeHtml(profileUrl)}" target="_blank" title="${escapeHtml(profileUrl)}">${escapeHtml(shortProfile)}</a>` : '—'}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      setDownloadEnabled(false);
+
+      async function fetchResults() {
+        try {
+          const res = await fetch(`/api/results?job_id=${encodeURIComponent(jobId)}`);
+          const data = await res.json();
+          renderResults(data.rows || []);
+        } catch (e) {
+          console.error('Error fetching results:', e);
+        }
+      }
+
+      async function poll() {
+        try {
+          const res = await fetch(`/api/progress?job_id=${encodeURIComponent(jobId)}`);
+          const progress = await res.json();
+
+          const total = progress.total || 0;
+          const completed = progress.completed || 0;
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          barEl.style.width = `${pct}%`;
+
+          const st = progress.status || 'idle';
+          const scraping = Object.values(progress.url_status || {}).filter(s => s === 'scraping').length;
+          statusEl.textContent =
+            st === 'running' ? `Scraping ${scraping} site(s) in parallel... ${completed}/${total} completed` :
+            st === 'completed' ? `Completed: ${completed}/${total}` :
+            st === 'cancelled' ? 'Cancelled' :
+            st === 'error' ? 'Error' : 'Idle';
+
+          const msg = progress.message || '';
+          detailsEl.textContent = msg;
+
+          renderSites(progress.url_status, progress.urls);
+
+          // Fetch results
+          await fetchResults();
+
+          if (st === 'completed') {
+            stopBtn.disabled = true;
+            setDownloadEnabled(true);
+            isFinished = true;
+            return;
+          }
+          if (st === 'cancelled' || st === 'error') {
+            stopBtn.disabled = true;
+            if ((progress.completed || 0) > 0) setDownloadEnabled(true);
+            isFinished = true;
+            return;
+          }
+        } catch (e) {
+          detailsEl.textContent = `Failed to fetch progress: ${e.message}`;
+        }
+        if (!isFinished) {
+          setTimeout(poll, 1000);
+        }
+      }
+
+      async function stopJob() {
+        stopBtn.disabled = true;
+        try {
+          await fetch('/api/stop-scrape', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: jobId }),
+          });
+        } catch (e) {
+          // ignore
+        } finally {
+          setTimeout(poll, 200);
+        }
+      }
+
+      poll();
+    </script>
+  </body>
+</html>

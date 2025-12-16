@@ -8,8 +8,16 @@ from urllib.parse import urljoin
 from flask import Flask, render_template, request, Response, jsonify
 from dotenv import load_dotenv
 import requests
-from scrapy_scraper import scrape_websites_with_scrapy, get_scraping_progress, reset_progress
-from list_importer import search_from_list
+from scrapy_scraper import (
+    scrape_websites_with_scrapy,
+    get_scraping_progress,
+    reset_progress,
+    start_scrape_job,
+    stop_scrape_job,
+    get_scraped_items,
+    get_job_urls,
+)
+from list_importer import search_from_list, normalize_url
 
 # Load environment variables from .env file
 load_dotenv()
@@ -17,10 +25,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Google Custom Search configuration
-GOOGLE_CSE_API_KEY = os.getenv(
-    "GOOGLE_CSE_API_KEY",
-    "AIzaSyDEKgDStf3W2sb2wmjDRPzIdj7khdqA0NA",
-)
+GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY")
 GOOGLE_CSE_CX = os.getenv("GOOGLE_CSE_CX")  # Search engine ID – must be set.
 
 
@@ -60,6 +65,15 @@ def get_websites_for_filters(
     Use Google Custom Search to find relevant business / company websites
     for the given filters. Returns (websites, total_results).
     """
+    if not GOOGLE_CSE_API_KEY:
+        raise RuntimeError(
+            "Google Custom Search API key is not configured.\n\n"
+            "To fix this:\n"
+            "1. Create/locate an API key in Google Cloud Console\n"
+            "2. Set it as an environment variable: export GOOGLE_CSE_API_KEY='your_key_here'\n\n"
+            "See README.md for detailed setup instructions."
+        )
+
     if not GOOGLE_CSE_CX:
         raise RuntimeError(
             "Google Custom Search 'cx' (search engine ID) is not configured.\n\n"
@@ -132,32 +146,224 @@ def get_websites_for_filters(
 @app.route("/api/progress", methods=["GET"])
 def get_progress():
     """API endpoint to get scraping progress"""
-    progress = get_scraping_progress()
+    job_id = request.args.get("job_id")
+    progress = get_scraping_progress(job_id=job_id)
     return jsonify(progress)
 
+
+@app.route("/api/start-scrape", methods=["POST"])
+def api_start_scrape():
+    """Start a scrape job and return a job_id."""
+    data = request.get_json(silent=True) or {}
+    urls = data.get("urls") or []
+    if not isinstance(urls, list):
+        return jsonify({"error": "urls must be a list"}), 400
+
+    normalized: List[str] = []
+    seen: set[str] = set()
+    for u in urls:
+        nu = normalize_url(str(u)) or str(u).strip()
+        if nu and nu not in seen:
+            seen.add(nu)
+            normalized.append(nu)
+
+    if not normalized:
+        return jsonify({"error": "No valid URLs provided"}), 400
+
+    job_id = start_scrape_job(normalized)
+    return jsonify({"success": True, "job_id": job_id, "count": len(normalized)})
+
+
+@app.route("/api/stop-scrape", methods=["POST"])
+def api_stop_scrape():
+    """Stop/cancel a running scrape job."""
+    data = request.get_json(silent=True) or {}
+    job_id = str(data.get("job_id", "")).strip()
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+    ok = stop_scrape_job(job_id)
+    return jsonify({"success": bool(ok), "job_id": job_id})
+
+
+@app.route("/api/results", methods=["GET"])
+def api_results():
+    """Get current scraped results for a job (may be partial if still running)."""
+    job_id = request.args.get("job_id", "").strip()
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+
+    items = get_scraped_items(job_id)
+
+    # Flatten to rows for easier display (one row per profile, or one row per site if no profiles)
+    rows = []
+    for item in items:
+        website = item.get("website", "")
+        emails = item.get("emails", [])
+        phones = item.get("phones", [])
+        profiles = item.get("lawyer_profiles", [])
+
+        if profiles:
+            for p in profiles:
+                rows.append({
+                    "website": website,
+                    "lawyer_name": p.get("lawyer_name", ""),
+                    "lawyer_email": p.get("lawyer_email", ""),
+                    "lawyer_phone": p.get("lawyer_phone", ""),
+                    "profile_url": p.get("profile_url", ""),
+                })
+        else:
+            # No profiles, show firm-level data
+            rows.append({
+                "website": website,
+                "lawyer_name": "",
+                "lawyer_email": "; ".join(emails[:3]) if emails else "",
+                "lawyer_phone": "; ".join(phones[:3]) if phones else "",
+                "profile_url": "",
+            })
+
+    return jsonify({"job_id": job_id, "count": len(rows), "rows": rows})
+
+
+@app.route("/progress/<job_id>", methods=["GET"])
+def progress_page(job_id: str):
+    """Dedicated progress page for a scrape job."""
+    return render_template("progress.html", job_id=job_id)
+
+
+def build_csv_from_scraped_data(websites: List[str], scraped_data: List[dict]) -> str:
+    """Build CSV from already-scraped data."""
+    output = io.StringIO()
+    writer = csv.DictWriter(
+        output,
+        fieldnames=[
+            "website",
+            "lawyer_name",
+            "lawyer_email",
+            "lawyer_phone",
+            "profile_url",
+            "profile_images",
+            "vcard_content",
+            "all_emails",
+            "all_phones",
+            "vcard_links",
+            "vcard_files_count",
+            "pdf_links",
+            "image_links",
+            "lawyer_profiles_count",
+        ],
+    )
+    writer.writeheader()
+
+    data_by_url = {item["website"]: item for item in scraped_data if isinstance(item, dict) and item.get("website")}
+
+    for site in websites:
+        data = data_by_url.get(
+            site,
+            {
+                "website": site,
+                "emails": [],
+                "phones": [],
+                "vcard_links": [],
+                "vcard_files": [],
+                "pdf_links": [],
+                "image_links": [],
+                "lawyer_profiles": [],
+            },
+        )
+
+        emails = data.get("emails", []) if isinstance(data.get("emails"), list) else []
+        phones = data.get("phones", []) if isinstance(data.get("phones"), list) else []
+        vcard_links = data.get("vcard_links", []) if isinstance(data.get("vcard_links"), list) else []
+        vcard_files = data.get("vcard_files", []) if isinstance(data.get("vcard_files"), list) else []
+        pdf_links = data.get("pdf_links", []) if isinstance(data.get("pdf_links"), list) else []
+        image_links = data.get("image_links", []) if isinstance(data.get("image_links"), list) else []
+        lawyer_profiles = data.get("lawyer_profiles", []) if isinstance(data.get("lawyer_profiles"), list) else []
+
+        if lawyer_profiles:
+            for profile in lawyer_profiles:
+                writer.writerow(
+                    {
+                        "website": data["website"],
+                        "lawyer_name": profile.get("lawyer_name", ""),
+                        "lawyer_email": profile.get("lawyer_email", ""),
+                        "lawyer_phone": profile.get("lawyer_phone", ""),
+                        "profile_url": profile.get("profile_url", ""),
+                        "profile_images": "; ".join(profile.get("profile_images", [])),
+                        "vcard_content": profile.get("vcard_content", ""),
+                        "all_emails": "; ".join(str(e) for e in emails),
+                        "all_phones": "; ".join(str(p) for p in phones),
+                        "vcard_links": "; ".join(str(v) for v in vcard_links),
+                        "vcard_files_count": len(vcard_files),
+                        "pdf_links": "; ".join(str(p) for p in pdf_links),
+                        "image_links": "; ".join(str(i) for i in image_links),
+                        "lawyer_profiles_count": len(lawyer_profiles),
+                    }
+                )
+        else:
+            writer.writerow(
+                {
+                    "website": data["website"],
+                    "lawyer_name": "",
+                    "lawyer_email": "",
+                    "lawyer_phone": "",
+                    "profile_url": "",
+                    "profile_images": "",
+                    "vcard_content": "",
+                    "all_emails": "; ".join(str(e) for e in emails),
+                    "all_phones": "; ".join(str(p) for p in phones),
+                    "vcard_links": "; ".join(str(v) for v in vcard_links),
+                    "vcard_files_count": len(vcard_files),
+                    "pdf_links": "; ".join(str(p) for p in pdf_links),
+                    "image_links": "; ".join(str(i) for i in image_links),
+                    "lawyer_profiles_count": 0,
+                }
+            )
+
+    return output.getvalue()
+
+
+@app.route("/download/<job_id>.csv", methods=["GET"])
+def download_job_csv(job_id: str):
+    """Download CSV for a completed scrape job."""
+    urls = get_job_urls(job_id)
+    items = get_scraped_items(job_id)
+    csv_data = build_csv_from_scraped_data(urls, items)
+    filename = f"law_firms_{job_id}.csv"
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 @app.route("/import-list", methods=["POST"])
 def import_list():
     """API endpoint to import URLs from external lists (WSJ, SuperLawyers, etc.)"""
     try:
-        data = request.get_json()
-        list_url = data.get('listUrl', '').strip()
-        list_text = data.get('listText', '').strip()
-        
+        data = request.get_json(silent=True) or {}
+        list_url = str(data.get("listUrl", "")).strip()
+        list_text = str(data.get("listText", "")).strip()
+
         if not list_url and not list_text:
-            return jsonify({'error': 'Please provide either a list URL or list text'}), 400
-        
-        urls, count = search_from_list(list_url=list_url if list_url else None, 
-                                       list_text=list_text if list_text else None)
-        
-        return jsonify({
-            'success': True,
-            'urls': urls,
-            'count': count,
-            'message': f'Found {count} law firm URL(s)'
-        })
+            return (
+                jsonify({"error": "Please provide either a list URL or list text"}),
+                400,
+            )
+
+        urls, count = search_from_list(
+            list_url=list_url if list_url else None,
+            list_text=list_text if list_text else None,
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "urls": urls,
+                "count": count,
+                "message": f"Found {count} law firm URL(s)",
+            }
+        )
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 def build_csv_for_websites(websites: List[str]) -> str:
@@ -188,14 +394,32 @@ def build_csv_for_websites(websites: List[str]) -> str:
     )
     writer.writeheader()
 
+    # Normalize/dedupe input websites (keep original order)
+    normalized_websites: List[str] = []
+    seen_sites: set[str] = set()
+    for w in websites:
+        n = normalize_url(w) or w
+        if n not in seen_sites:
+            seen_sites.add(n)
+            normalized_websites.append(n)
+
     # Use Scrapy to scrape websites concurrently
+    websites = normalized_websites
     print(f"Starting to scrape {len(websites)} website(s)...")
     print(f"URLs to scrape: {websites}")
     try:
         scraped_data = scrape_websites_with_scrapy(websites)
         print(f"Scraping completed. Found data for {len(scraped_data)} website(s).")
         if scraped_data:
-            print(f"Sample data: {scraped_data[0] if scraped_data else 'None'}")
+            sample = scraped_data[0] or {}
+            print(
+                "Sample item summary: "
+                f"website={sample.get('website')}, "
+                f"emails={len(sample.get('emails') or [])}, "
+                f"phones={len(sample.get('phones') or [])}, "
+                f"profiles={len(sample.get('lawyer_profiles') or [])}, "
+                f"vcards={len(sample.get('vcard_files') or [])}"
+            )
         else:
             print("WARNING: No data was scraped!")
     except Exception as e:

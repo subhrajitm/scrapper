@@ -3,9 +3,118 @@ Module for importing URLs from external lists (WSJ, SuperLawyers, etc.)
 """
 import re
 from typing import List, Tuple
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
 import requests
 from bs4 import BeautifulSoup
+
+
+_DROP_QUERY_KEYS_PREFIX = ("utm_",)
+_DROP_QUERY_KEYS_EXACT = {
+    "gclid",
+    "fbclid",
+    "msclkid",
+    "igshid",
+    "mc_cid",
+    "mc_eid",
+}
+
+
+def normalize_url(url: str) -> str | None:
+    """
+    Normalize a URL for deduping:
+    - ensure scheme (default https)
+    - lowercase scheme/host
+    - strip fragment
+    - remove common tracking query params
+    """
+    if not url:
+        return None
+    url = url.strip().rstrip('.,;:')
+    if not url:
+        return None
+
+    # If it's a bare domain, add scheme.
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return None
+
+    if not parsed.netloc:
+        return None
+
+    scheme = (parsed.scheme or "https").lower()
+    netloc = parsed.netloc.lower()
+
+    # Normalize www.
+    if netloc.startswith("www."):
+        netloc = netloc[4:]
+
+    # Drop fragment.
+    fragment = ""
+
+    # Filter query params.
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    filtered_pairs = []
+    for k, v in query_pairs:
+        kl = k.lower()
+        if any(kl.startswith(pfx) for pfx in _DROP_QUERY_KEYS_PREFIX):
+            continue
+        if kl in _DROP_QUERY_KEYS_EXACT:
+            continue
+        filtered_pairs.append((k, v))
+    query = urlencode(filtered_pairs, doseq=True)
+
+    # Normalize path: keep it, but collapse trailing slash.
+    path = parsed.path or "/"
+    if path != "/" and path.endswith("/"):
+        path = path[:-1]
+
+    normalized = urlunparse((scheme, netloc, path, "", query, fragment))
+    return normalized
+
+
+_SKIP_NETLOCS = {
+    "facebook.com",
+    "twitter.com",
+    "x.com",
+    "linkedin.com",
+    "instagram.com",
+    "youtube.com",
+    "t.me",
+    "webcache.googleusercontent.com",
+    "accounts.google.com",
+}
+
+
+def _is_candidate_site(url: str, *, source_netloc: str | None = None) -> bool:
+    """Heuristic filter to keep likely external firm sites."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+
+    host = (parsed.netloc or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if not host or "." not in host:
+        return False
+
+    # Skip same-site links when importing from an article/list page.
+    if source_netloc:
+        sn = source_netloc.lower()
+        if sn.startswith("www."):
+            sn = sn[4:]
+        if host == sn:
+            return False
+
+    # Skip obvious non-targets (social/logins).
+    if host in _SKIP_NETLOCS:
+        return False
+
+    return True
 
 
 def extract_urls_from_text(text: str) -> List[str]:
@@ -25,22 +134,19 @@ def extract_urls_from_text(text: str) -> List[str]:
     )
     domains = domain_pattern.findall(text)
     
-    # Filter domains that look like law firm websites
-    law_keywords = ['law', 'legal', 'attorney', 'lawyer', 'firm', 'llp', 'llc']
+    # Add any domain-like matches (don’t require law keywords; many firms don't include them).
     for domain in domains:
-        domain_lower = domain.lower()
-        if any(keyword in domain_lower for keyword in law_keywords):
-            if not domain.startswith('http'):
-                urls.append(f'https://{domain}')
+        if not domain.startswith('http'):
+            urls.append(domain)
     
     # Remove duplicates and normalize
     unique_urls = []
     seen = set()
     for url in urls:
-        url = url.strip().rstrip('.,;:')
-        if url and url not in seen:
-            seen.add(url)
-            unique_urls.append(url)
+        normalized = normalize_url(url)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            unique_urls.append(normalized)
     
     return unique_urls
 
@@ -64,6 +170,7 @@ def extract_urls_from_url(article_url: str) -> List[str]:
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
+        source_netloc = urlparse(article_url).netloc
         
         # Extract all href attributes
         urls = []
@@ -77,29 +184,19 @@ def extract_urls_from_url(article_url: str) -> List[str]:
         text_urls = extract_urls_from_text(response.text)
         urls.extend(text_urls)
         
-        # Filter to likely law firm websites
-        law_keywords = ['law', 'legal', 'attorney', 'lawyer', 'firm', 'llp', 'llc']
+        # Normalize + filter to likely external target websites
         filtered_urls = []
         seen = set()
-        
         for url in urls:
-            url_lower = url.lower()
-            # Check if URL contains law-related keywords
-            if any(keyword in url_lower for keyword in law_keywords):
-                if url not in seen:
-                    seen.add(url)
-                    filtered_urls.append(url)
-            # Also check domain
-            try:
-                parsed = urlparse(url)
-                domain = parsed.netloc.lower()
-                if any(keyword in domain for keyword in law_keywords):
-                    if url not in seen:
-                        seen.add(url)
-                        filtered_urls.append(url)
-            except:
-                pass
-        
+            normalized = normalize_url(url)
+            if not normalized:
+                continue
+            if not _is_candidate_site(normalized, source_netloc=source_netloc):
+                continue
+            if normalized not in seen:
+                seen.add(normalized)
+                filtered_urls.append(normalized)
+
         return filtered_urls
         
     except Exception as e:
