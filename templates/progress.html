@@ -1,374 +1,430 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Scraping Progress</title>
-    <style>
-      * { box-sizing: border-box; }
-      body {
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-        background: #f7f7fb;
-        margin: 0;
-        padding: 24px;
-        color: #222;
-      }
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-      }
-      .card {
-        background: #fff;
-        border: 1px solid #e9e9ef;
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 6px 18px rgba(15, 15, 20, 0.06);
-        margin-bottom: 20px;
-      }
-      .title {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 8px;
-      }
-      .title h1 {
-        font-size: 18px;
-        margin: 0;
-      }
-      .meta {
-        font-size: 12px;
-        color: #666;
-        word-break: break-all;
-      }
-      .bar-wrap {
-        height: 10px;
-        background: #eee;
-        border-radius: 999px;
-        overflow: hidden;
-        margin: 14px 0 10px;
-      }
-      .bar {
-        height: 100%;
-        width: 0%;
-        background: linear-gradient(90deg, #4a90e2, #48bb78);
-        transition: width 0.2s ease;
-      }
-      .status {
-        font-weight: 700;
-        margin: 0 0 8px;
-      }
-      .details {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 12px;
-        white-space: pre-wrap;
-        background: #0f172a;
-        color: #e2e8f0;
-        padding: 12px;
-        border-radius: 10px;
-        min-height: 40px;
-      }
-      .sites-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        gap: 8px;
-        margin-top: 14px;
-      }
-      .site-card {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 8px 10px;
-        font-size: 11px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .site-card.pending { border-left: 3px solid #94a3b8; }
-      .site-card.scraping { border-left: 3px solid #3b82f6; background: #eff6ff; }
-      .site-card.completed { border-left: 3px solid #22c55e; background: #f0fdf4; }
-      .site-card.error { border-left: 3px solid #ef4444; background: #fef2f2; }
-      .site-icon { font-size: 12px; flex-shrink: 0; }
-      .site-url {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        flex: 1;
-      }
-      .actions {
-        display: flex;
-        gap: 12px;
-        margin-top: 14px;
-        flex-wrap: wrap;
-      }
-      button, a.btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 10px 14px;
-        border-radius: 10px;
-        border: 1px solid #d8d8e3;
-        background: #fff;
-        cursor: pointer;
-        text-decoration: none;
-        color: #222;
-        font-weight: 600;
-        font-size: 13px;
-      }
-      button.primary, a.btn.primary { background: #4a90e2; border-color: #4a90e2; color: #fff; }
-      button.danger { background: #ef4444; border-color: #ef4444; color: #fff; }
-      button:disabled { opacity: 0.6; cursor: not-allowed; }
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scraping Job - LegalScrape Pro</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --surface: #fff;
+      --border: #e1e4e8;
+      --border-dark: #d0d4d9;
+      --text: #24292f;
+      --text-muted: #57606a;
+      --text-light: #8b949e;
+      --primary: #0969da;
+      --primary-hover: #0860ca;
+      --success: #1a7f37;
+      --success-bg: #dafbe1;
+      --warning: #9a6700;
+      --warning-bg: #fff8c5;
+      --danger: #cf222e;
+      --danger-bg: #ffebe9;
+      --header-bg: #24292f;
+      --header-text: #f0f6fc;
+      --radius: 6px;
+      --shadow: 0 1px 3px rgba(31,35,40,.12), 0 8px 24px rgba(66,74,83,.12);
+      --shadow-sm: 0 1px 0 rgba(31,35,40,.04);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    /* Header */
+    .header {
+      background: var(--header-bg);
+      padding: 0 16px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .logo {
+      color: var(--header-text);
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo svg { fill: var(--header-text); }
+    .breadcrumb {
+      color: rgba(255,255,255,.5);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .breadcrumb a { color: rgba(255,255,255,.7); text-decoration: none; }
+    .breadcrumb a:hover { color: #fff; }
+    /* Main */
+    .main { max-width: 1280px; margin: 0 auto; padding: 16px; }
+    /* Panel */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 16px;
+    }
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .panel-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .panel-body { padding: 16px; }
+    /* Status */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .status-badge.running { background: var(--warning-bg); color: var(--warning); }
+    .status-badge.completed { background: var(--success-bg); color: var(--success); }
+    .status-badge.cancelled { background: var(--bg); color: var(--text-muted); }
+    .status-badge.error { background: var(--danger-bg); color: var(--danger); }
+    .status-badge.idle { background: var(--bg); color: var(--text-muted); }
+    .status-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .status-badge.running::before { animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+    .progress-text { font-size: 13px; color: var(--text-muted); }
+    /* Progress bar */
+    .progress-bar-wrap {
+      height: 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--primary), #2ea44f);
+      transition: width .3s ease;
+    }
+    /* Message */
+    .message-box {
+      background: var(--bg);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      min-height: 32px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    /* Sites grid */
+    .sites-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .site-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+    .site-item.pending { border-left: 3px solid var(--text-light); }
+    .site-item.scraping { border-left: 3px solid var(--primary); background: rgba(9,105,218,.05); }
+    .site-item.completed { border-left: 3px solid var(--success); background: rgba(26,127,55,.05); }
+    .site-item.error { border-left: 3px solid var(--danger); background: rgba(207,34,46,.05); }
+    .site-icon { font-size: 11px; flex-shrink: 0; }
+    .site-url { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Actions */
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      height: 32px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all .15s;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-default { background: var(--surface); color: var(--text); }
+    .btn-default:hover:not(:disabled) { background: var(--bg); border-color: var(--border-dark); }
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #b91c26; }
+    /* Table */
+    .table-wrap { overflow-x: auto; max-height: 400px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { background: var(--bg); font-weight: 600; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; position: sticky; top: 0; z-index: 1; }
+    tr:hover { background: #f6f8fa; }
+    td { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td a { color: var(--primary); text-decoration: none; }
+    td a:hover { text-decoration: underline; }
+    .empty-row { text-align: center; color: var(--text-muted); padding: 24px; }
+    /* Stats */
+    .stats { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+    .stat { display: flex; flex-direction: column; }
+    .stat-value { font-size: 20px; font-weight: 600; color: var(--text); }
+    .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+    /* Two columns */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <a href="/" class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      LegalScrape Pro
+    </a>
+    <div class="breadcrumb">
+      <span>/</span>
+      <a href="/">Search</a>
+      <span>/</span>
+      <span>Job</span>
+    </div>
+  </header>
 
-      /* Results Table */
-      .results-section {
-        margin-top: 0;
-      }
-      .results-section h2 {
-        font-size: 16px;
-        margin: 0 0 12px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .results-section h2 .count {
-        background: #4a90e2;
-        color: #fff;
-        font-size: 12px;
-        padding: 2px 8px;
-        border-radius: 12px;
-      }
-      .table-wrap {
-        overflow-x: auto;
-        max-height: 500px;
-        overflow-y: auto;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-      }
-      th, td {
-        text-align: left;
-        padding: 10px 12px;
-        border-bottom: 1px solid #e2e8f0;
-      }
-      th {
-        background: #f8fafc;
-        font-weight: 600;
-        position: sticky;
-        top: 0;
-        z-index: 1;
-      }
-      tr:hover { background: #f8fafc; }
-      td {
-        max-width: 200px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      td a {
-        color: #3b82f6;
-        text-decoration: none;
-      }
-      td a:hover { text-decoration: underline; }
-      .empty-msg {
-        text-align: center;
-        padding: 40px;
-        color: #666;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="card">
-        <div class="title">
-          <h1>Scraping Progress</h1>
-          <a class="btn" href="/">Back</a>
+  <main class="main">
+    <div class="grid-2">
+      <!-- Progress Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0zm7-3.25v2.992l2.028.812a.75.75 0 0 1-.557 1.392l-2.5-1A.75.75 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0z"/></svg>
+            Job Progress
+          </span>
+          <span class="status-badge idle" id="statusBadge">Idle</span>
         </div>
-        <div class="meta">Job: <span id="jobId">{{ job_id }}</span></div>
-        <div class="bar-wrap"><div class="bar" id="bar"></div></div>
-        <p class="status" id="status">Initializing...</p>
-        <div class="details" id="details"></div>
-
-        <div class="sites-grid" id="sitesGrid"></div>
-
-        <div class="actions">
-          <button class="danger" id="stopBtn" onclick="stopJob()">Stop</button>
-          <a class="btn primary" id="downloadBtn" href="#" onclick="return false;">Download CSV</a>
+        <div class="panel-body">
+          <div class="stats">
+            <div class="stat"><span class="stat-value" id="completedCount">0</span><span class="stat-label">Completed</span></div>
+            <div class="stat"><span class="stat-value" id="totalCount">0</span><span class="stat-label">Total</span></div>
+            <div class="stat"><span class="stat-value" id="scrapingCount">0</span><span class="stat-label">In Progress</span></div>
+          </div>
+          <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+          <div class="message-box" id="messageBox">Initializing...</div>
+          <div class="sites-grid" id="sitesGrid"></div>
         </div>
       </div>
 
-      <div class="card results-section">
-        <h2>Scraped Data <span class="count" id="rowCount">0</span></h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Website</th>
-                <th>Lawyer Name</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Profile URL</th>
-              </tr>
-            </thead>
-            <tbody id="resultsBody">
-              <tr><td colspan="5" class="empty-msg">No data yet...</td></tr>
-            </tbody>
-          </table>
+      <!-- Actions Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 13.25 15H2.75A1.75 1.75 0 0 1 1 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25Zm7.47 3.97l-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06l1.47 1.47 3.47-3.47a.75.75 0 1 1 1.06 1.06Z"/></svg>
+            Actions
+          </span>
+        </div>
+        <div class="panel-body">
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Job ID: <code id="jobIdDisplay" style="background:var(--bg);padding:2px 6px;border-radius:4px;">{{ job_id }}</code></p>
+          <div class="actions">
+            <button class="btn btn-danger" id="stopBtn" onclick="stopJob()">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
+              Stop
+            </button>
+            <a class="btn btn-primary" id="downloadBtn" href="#" onclick="return false;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Zm-1-6a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75Zm3.75-.75a.75.75 0 0 0 0 1.5H7v2.69L5.22 9.66a.75.75 0 0 0-1.06 1.06l2.5 2.5a.748.748 0 0 0 1.06 0l2.5-2.5a.75.75 0 1 0-1.06-1.06L7.5 11.19V8h1.75a.75.75 0 0 0 0-1.5Z"/></svg>
+              Download CSV
+            </a>
+            <a class="btn btn-default" href="/">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"/></svg>
+              Back
+            </a>
+          </div>
         </div>
       </div>
     </div>
 
-    <script>
-      const jobId = document.getElementById('jobId').textContent.trim();
-      const statusEl = document.getElementById('status');
-      const detailsEl = document.getElementById('details');
-      const barEl = document.getElementById('bar');
-      const stopBtn = document.getElementById('stopBtn');
-      const downloadBtn = document.getElementById('downloadBtn');
-      const sitesGrid = document.getElementById('sitesGrid');
-      const resultsBody = document.getElementById('resultsBody');
-      const rowCountEl = document.getElementById('rowCount');
+    <!-- Results Table -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25ZM1.5 6.5v7.75c0 .138.112.25.25.25H5v-8Zm5 8h8.25a.25.25 0 0 0 .25-.25V6.5h-8.5ZM14.5 5V1.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25V5Z"/></svg>
+          Scraped Data
+        </span>
+        <span style="font-size:12px;color:var(--text-muted);"><span id="rowCount">0</span> records</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Website</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Profile</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody">
+            <tr><td colspan="5" class="empty-row">Waiting for data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
 
-      let isFinished = false;
+  <script>
+    const jobId = '{{ job_id }}';
+    const statusBadge = document.getElementById('statusBadge');
+    const progressBar = document.getElementById('progressBar');
+    const messageBox = document.getElementById('messageBox');
+    const sitesGrid = document.getElementById('sitesGrid');
+    const resultsBody = document.getElementById('resultsBody');
+    const rowCountEl = document.getElementById('rowCount');
+    const completedCount = document.getElementById('completedCount');
+    const totalCount = document.getElementById('totalCount');
+    const scrapingCount = document.getElementById('scrapingCount');
+    const stopBtn = document.getElementById('stopBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
 
-      function setDownloadEnabled(enabled) {
-        if (enabled) {
-          downloadBtn.href = `/download/${jobId}.csv`;
-          downloadBtn.onclick = null;
-        } else {
-          downloadBtn.href = '#';
-          downloadBtn.onclick = () => false;
-        }
+    let isFinished = false;
+
+    function setDownloadEnabled(enabled) {
+      if (enabled) {
+        downloadBtn.href = `/download/${jobId}.csv`;
+        downloadBtn.onclick = null;
+        downloadBtn.classList.remove('btn-default');
+        downloadBtn.classList.add('btn-primary');
+      } else {
+        downloadBtn.href = '#';
+        downloadBtn.onclick = () => false;
       }
+    }
 
-      function statusIcon(st) {
-        if (st === 'scraping') return '🔄';
-        if (st === 'completed') return '✅';
-        if (st === 'error') return '❌';
-        return '⏳';
+    function statusIcon(st) {
+      if (st === 'scraping') return '●';
+      if (st === 'completed') return '✓';
+      if (st === 'error') return '✗';
+      return '○';
+    }
+
+    function renderSites(urlStatus, urls) {
+      if (!urls || !urls.length) { sitesGrid.innerHTML = ''; return; }
+      sitesGrid.innerHTML = urls.map(url => {
+        const st = (urlStatus && urlStatus[url]) || 'pending';
+        const short = url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 28);
+        return `<div class="site-item ${st}"><span class="site-icon">${statusIcon(st)}</span><span class="site-url" title="${url}">${short}</span></div>`;
+      }).join('');
+    }
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function renderResults(rows) {
+      rowCountEl.textContent = rows.length;
+      if (!rows.length) {
+        resultsBody.innerHTML = '<tr><td colspan="5" class="empty-row">No data yet...</td></tr>';
+        return;
       }
+      resultsBody.innerHTML = rows.map(r => {
+        const site = escapeHtml((r.website || '').replace(/^https?:\/\/(www\.)?/, '').slice(0, 25));
+        const name = escapeHtml(r.lawyer_name || '—');
+        const email = escapeHtml(r.lawyer_email || '—');
+        const phone = escapeHtml(r.lawyer_phone || '—');
+        const profile = r.profile_url ? `<a href="${escapeHtml(r.profile_url)}" target="_blank">${escapeHtml(r.profile_url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 25))}</a>` : '—';
+        return `<tr><td title="${escapeHtml(r.website)}">${site}</td><td>${name}</td><td>${email}</td><td>${phone}</td><td>${profile}</td></tr>`;
+      }).join('');
+    }
 
-      function renderSites(urlStatus, urls) {
-        if (!urls || urls.length === 0) {
-          sitesGrid.innerHTML = '';
+    async function fetchResults() {
+      try {
+        const res = await fetch(`/api/results?job_id=${encodeURIComponent(jobId)}`);
+        const data = await res.json();
+        renderResults(data.rows || []);
+      } catch (e) { console.error(e); }
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch(`/api/progress?job_id=${encodeURIComponent(jobId)}`);
+        const p = await res.json();
+
+        const total = p.total || 0;
+        const completed = p.completed || 0;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        progressBar.style.width = `${pct}%`;
+
+        completedCount.textContent = completed;
+        totalCount.textContent = total;
+        const scraping = Object.values(p.url_status || {}).filter(s => s === 'scraping').length;
+        scrapingCount.textContent = scraping;
+
+        const st = p.status || 'idle';
+        statusBadge.className = `status-badge ${st}`;
+        statusBadge.textContent = st.charAt(0).toUpperCase() + st.slice(1);
+
+        messageBox.textContent = p.message || '';
+        renderSites(p.url_status, p.urls);
+        await fetchResults();
+
+        if (st === 'completed') {
+          stopBtn.disabled = true;
+          setDownloadEnabled(true);
+          isFinished = true;
           return;
         }
-        sitesGrid.innerHTML = urls.map(url => {
-          const st = (urlStatus && urlStatus[url]) || 'pending';
-          const shortUrl = url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 35);
-          return `<div class="site-card ${st}">
-            <span class="site-icon">${statusIcon(st)}</span>
-            <span class="site-url" title="${url}">${shortUrl}</span>
-          </div>`;
-        }).join('');
-      }
-
-      function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-      }
-
-      function renderResults(rows) {
-        rowCountEl.textContent = rows.length;
-        if (!rows || rows.length === 0) {
-          resultsBody.innerHTML = '<tr><td colspan="5" class="empty-msg">No data yet...</td></tr>';
+        if (st === 'cancelled' || st === 'error') {
+          stopBtn.disabled = true;
+          if (completed > 0) setDownloadEnabled(true);
+          isFinished = true;
           return;
         }
-        resultsBody.innerHTML = rows.map(r => {
-          const site = escapeHtml(r.website || '');
-          const shortSite = site.replace(/^https?:\/\/(www\.)?/, '').slice(0, 30);
-          const name = escapeHtml(r.lawyer_name || '—');
-          const email = escapeHtml(r.lawyer_email || '—');
-          const phone = escapeHtml(r.lawyer_phone || '—');
-          const profileUrl = r.profile_url || '';
-          const shortProfile = profileUrl ? profileUrl.replace(/^https?:\/\/(www\.)?/, '').slice(0, 35) : '—';
-          return `<tr>
-            <td title="${site}">${shortSite}</td>
-            <td>${name}</td>
-            <td>${email}</td>
-            <td>${phone}</td>
-            <td>${profileUrl ? `<a href="${escapeHtml(profileUrl)}" target="_blank" title="${escapeHtml(profileUrl)}">${escapeHtml(shortProfile)}</a>` : '—'}</td>
-          </tr>`;
-        }).join('');
+      } catch (e) {
+        messageBox.textContent = `Error: ${e.message}`;
       }
+      if (!isFinished) setTimeout(poll, 1000);
+    }
 
-      setDownloadEnabled(false);
+    async function stopJob() {
+      stopBtn.disabled = true;
+      try {
+        await fetch('/api/stop-scrape', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId })
+        });
+      } catch (e) {}
+      setTimeout(poll, 200);
+    }
 
-      async function fetchResults() {
-        try {
-          const res = await fetch(`/api/results?job_id=${encodeURIComponent(jobId)}`);
-          const data = await res.json();
-          renderResults(data.rows || []);
-        } catch (e) {
-          console.error('Error fetching results:', e);
-        }
-      }
-
-      async function poll() {
-        try {
-          const res = await fetch(`/api/progress?job_id=${encodeURIComponent(jobId)}`);
-          const progress = await res.json();
-
-          const total = progress.total || 0;
-          const completed = progress.completed || 0;
-          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-          barEl.style.width = `${pct}%`;
-
-          const st = progress.status || 'idle';
-          const scraping = Object.values(progress.url_status || {}).filter(s => s === 'scraping').length;
-          statusEl.textContent =
-            st === 'running' ? `Scraping ${scraping} site(s) in parallel... ${completed}/${total} completed` :
-            st === 'completed' ? `Completed: ${completed}/${total}` :
-            st === 'cancelled' ? 'Cancelled' :
-            st === 'error' ? 'Error' : 'Idle';
-
-          const msg = progress.message || '';
-          detailsEl.textContent = msg;
-
-          renderSites(progress.url_status, progress.urls);
-
-          // Fetch results
-          await fetchResults();
-
-          if (st === 'completed') {
-            stopBtn.disabled = true;
-            setDownloadEnabled(true);
-            isFinished = true;
-            return;
-          }
-          if (st === 'cancelled' || st === 'error') {
-            stopBtn.disabled = true;
-            if ((progress.completed || 0) > 0) setDownloadEnabled(true);
-            isFinished = true;
-            return;
-          }
-        } catch (e) {
-          detailsEl.textContent = `Failed to fetch progress: ${e.message}`;
-        }
-        if (!isFinished) {
-          setTimeout(poll, 1000);
-        }
-      }
-
-      async function stopJob() {
-        stopBtn.disabled = true;
-        try {
-          await fetch('/api/stop-scrape', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ job_id: jobId }),
-          });
-        } catch (e) {
-          // ignore
-        } finally {
-          setTimeout(poll, 200);
-        }
-      }
-
-      poll();
-    </script>
-  </body>
+    setDownloadEnabled(false);
+    poll();
+  </script>
+</body>
 </html>
