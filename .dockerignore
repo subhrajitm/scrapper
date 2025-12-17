@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursor/
+
+# Build
+*.egg-info/
+dist/
+build/
+
+# Scrapy
+.scrapy/
+
+# Logs
+*.log
+
+# Local files
+*.csv
+assets/
+ENHANCEMENTS.md
+README.md
+.env.example

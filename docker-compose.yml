@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  legalscrape:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - GOOGLE_CSE_API_KEY=${GOOGLE_CSE_API_KEY}
+      - GOOGLE_CSE_CX=${GOOGLE_CSE_CX}
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
