@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job History - LegalScrape Pro</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --surface: #fff;
+      --border: #e1e4e8;
+      --text: #24292f;
+      --text-muted: #57606a;
+      --primary: #0969da;
+      --success: #1a7f37;
+      --success-bg: #dafbe1;
+      --warning: #9a6700;
+      --warning-bg: #fff8c5;
+      --danger: #cf222e;
+      --danger-bg: #ffebe9;
+      --header-bg: #24292f;
+      --header-text: #f0f6fc;
+      --radius: 6px;
+      --shadow-sm: 0 1px 0 rgba(31,35,40,.04);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .header {
+      background: var(--header-bg);
+      padding: 0 16px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .logo {
+      color: var(--header-text);
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo svg { fill: var(--header-text); }
+    .nav { display: flex; gap: 4px; }
+    .nav a {
+      color: rgba(255,255,255,.7);
+      text-decoration: none;
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      transition: all .15s;
+    }
+    .nav a:hover { color: #fff; background: rgba(255,255,255,.1); }
+    .nav a.active { color: #fff; background: rgba(255,255,255,.15); }
+    .main { max-width: 1280px; margin: 0 auto; padding: 16px; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+    }
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    th { background: var(--bg); font-weight: 600; font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+    tr:hover { background: #f6f8fa; }
+    td a { color: var(--primary); text-decoration: none; }
+    td a:hover { text-decoration: underline; }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .status-badge.completed { background: var(--success-bg); color: var(--success); }
+    .status-badge.running { background: var(--warning-bg); color: var(--warning); }
+    .status-badge.cancelled, .status-badge.pending { background: var(--bg); color: var(--text-muted); }
+    .status-badge.error { background: var(--danger-bg); color: var(--danger); }
+    .empty { text-align: center; padding: 48px 16px; color: var(--text-muted); }
+    .btn {
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all .15s;
+      text-decoration: none;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .btn:hover { background: var(--bg); }
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn-primary:hover { background: #0860ca; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <a href="/" class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      LegalScrape Pro
+    </a>
+    <nav class="nav">
+      <a href="/">Search</a>
+      <a href="/history" class="active">History</a>
+      <a href="#">Settings</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.643 3.143.427 1.927A.25.25 0 0 0 0 2.104V5.75c0 .138.112.25.25.25h3.646a.25.25 0 0 0 .177-.427L2.715 4.215a6.5 6.5 0 1 1-1.18 4.458.75.75 0 1 0-1.493.154 8.001 8.001 0 1 0 1.6-5.684zM7.75 4a.75.75 0 0 0-.75.75v2.992l2.028.812a.75.75 0 0 0 .557-1.392l-1.085-.434V4.75A.75.75 0 0 0 7.75 4z"/></svg>
+          Job History
+        </span>
+        <button class="btn" onclick="loadJobs()">Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Status</th>
+              <th>URLs</th>
+              <th>Completed</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="jobsBody">
+            <tr><td colspan="6" class="empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function formatDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+
+    async function loadJobs() {
+      const body = document.getElementById('jobsBody');
+      try {
+        const res = await fetch('/api/jobs?limit=50');
+        const data = await res.json();
+        if (!data.jobs || data.jobs.length === 0) {
+          body.innerHTML = '<tr><td colspan="6" class="empty">No jobs yet. Start scraping to see history.</td></tr>';
+          return;
+        }
+        body.innerHTML = data.jobs.map(job => {
+          const shortId = job.id.slice(0, 8) + '...';
+          return `<tr>
+            <td><a href="/progress/${job.id}" title="${job.id}">${shortId}</a></td>
+            <td><span class="status-badge ${job.status}">${job.status}</span></td>
+            <td>${job.total || 0}</td>
+            <td>${job.completed || 0}</td>
+            <td>${formatDate(job.created_at)}</td>
+            <td>
+              <a href="/progress/${job.id}" class="btn">View</a>
+              <a href="/download/${job.id}.csv" class="btn btn-primary">CSV</a>
+            </td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        body.innerHTML = `<tr><td colspan="6" class="empty">Error loading jobs: ${e.message}</td></tr>`;
+      }
+    }
+
+    loadJobs();
+  </script>
+</body>
+</html>

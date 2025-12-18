@@ -7,3 +7,14 @@ scrapy==2.11.0
 legacy-cgi
 python-dotenv==1.0.0
 gunicorn==21.2.0
+
+# Database
+SQLAlchemy==2.0.23
+
+# Background jobs (optional - requires Redis)
+celery==5.3.4
+redis==5.0.1
+
+# JavaScript rendering (optional)
+scrapy-playwright==0.0.34
+playwright==1.40.0

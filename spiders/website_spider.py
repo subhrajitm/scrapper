@@ -1,9 +1,18 @@
 import re
 import base64
+import os
 from urllib.parse import urljoin, urlparse
 from scrapy import Spider, Request
 from scrapy.exceptions import CloseSpider
 from items import WebsiteItem
+
+
+# Check if Playwright is available for JavaScript rendering
+try:
+    import scrapy_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
 
 
 class WebsiteSpider(Spider):
@@ -30,7 +39,10 @@ class WebsiteSpider(Spider):
         'counsel', 'staff', 'professional', 'member'
     ]
     
-    def __init__(self, urls=None, job_id=None, *args, **kwargs):
+    # Playwright settings for JavaScript rendering
+    use_playwright = os.getenv("USE_PLAYWRIGHT", "false").lower() == "true"
+    
+    def __init__(self, urls=None, job_id=None, use_js=None, *args, **kwargs):
         super(WebsiteSpider, self).__init__(*args, **kwargs)
         self.job_id = job_id or "default"
         if urls:
@@ -41,6 +53,27 @@ class WebsiteSpider(Spider):
         self.site_data = {}
         # Track which URLs we've processed
         self.processed_urls = set()
+        
+        # Enable Playwright if requested and available
+        if use_js is not None:
+            self.use_playwright = use_js and PLAYWRIGHT_AVAILABLE
+        elif self.use_playwright:
+            self.use_playwright = PLAYWRIGHT_AVAILABLE
+            
+        if self.use_playwright:
+            self.logger.info("Playwright enabled for JavaScript rendering")
+    
+    def _get_playwright_meta(self) -> dict:
+        """Get Playwright meta options for JavaScript rendering."""
+        if not self.use_playwright or not PLAYWRIGHT_AVAILABLE:
+            return {}
+        return {
+            "playwright": True,
+            "playwright_include_page": False,
+            "playwright_page_methods": [
+                {"method": "wait_for_load_state", "args": ["networkidle"]},
+            ],
+        }
 
     def _visible_text(self, response) -> str:
         """
@@ -114,7 +147,10 @@ class WebsiteSpider(Spider):
             except:
                 pass
             # Priority 0 = highest; all base URLs get processed first in parallel
-            yield Request(url, callback=self.parse, errback=self.errback, meta={'base_url': base_url, 'depth': 0}, dont_filter=True, priority=0)
+            # Include Playwright meta if enabled for JavaScript rendering
+            meta = {'base_url': base_url, 'depth': 0}
+            meta.update(self._get_playwright_meta())
+            yield Request(url, callback=self.parse, errback=self.errback, meta=meta, dont_filter=True, priority=0)
     
     def errback(self, failure):
         """Handle request errors"""

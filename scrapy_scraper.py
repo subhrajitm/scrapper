@@ -83,6 +83,8 @@ _crawl_serial_lock = threading.Lock()
 
 def _build_scrapy_settings() -> Settings:
     """Configure Scrapy settings (shared across crawls)."""
+    import os
+    
     settings = Settings()
     settings.set(
         'USER_AGENT',
@@ -122,6 +124,27 @@ def _build_scrapy_settings() -> Settings:
             'Accept-Language': 'en',
         },
     )
+    
+    # Playwright settings for JavaScript rendering (if enabled)
+    use_playwright = os.getenv("USE_PLAYWRIGHT", "false").lower() == "true"
+    if use_playwright:
+        try:
+            import scrapy_playwright  # noqa: F401
+            settings.set('DOWNLOAD_HANDLERS', {
+                "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+                "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            })
+            settings.set('TWISTED_REACTOR', 'twisted.internet.asyncioreactor.AsyncioSelectorReactor')
+            settings.set('PLAYWRIGHT_BROWSER_TYPE', 'chromium')
+            settings.set('PLAYWRIGHT_LAUNCH_OPTIONS', {
+                'headless': True,
+                'args': ['--no-sandbox', '--disable-dev-shm-usage'],
+            })
+            settings.set('PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT', 30000)
+            print("✓ Playwright enabled for JavaScript rendering")
+        except ImportError:
+            print("⚠ Playwright not installed, using standard HTTP requests")
+    
     return settings
 
 
