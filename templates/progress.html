@@ -350,13 +350,28 @@
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function renderResults(rows) {
+    function renderResults(rows, isComplete) {
       rowCountEl.textContent = rows.length;
       if (!rows.length) {
-        resultsBody.innerHTML = '<tr><td colspan="5" class="empty-row">No data yet...</td></tr>';
+        if (isComplete) {
+          resultsBody.innerHTML = `<tr><td colspan="5" class="empty-row" style="color: var(--warning);">
+            <strong>No data found.</strong> The website may use JavaScript heavily, have anti-scraping protection, 
+            or not display contact information publicly. Consider trying a different website.
+          </td></tr>`;
+        } else {
+          resultsBody.innerHTML = '<tr><td colspan="5" class="empty-row">Waiting for data...</td></tr>';
+        }
         return;
       }
-      resultsBody.innerHTML = rows.map(r => {
+      // Check if we have any actual contact data
+      const hasContactData = rows.some(r => r.lawyer_email || r.lawyer_phone);
+      let warningHtml = '';
+      if (isComplete && !hasContactData) {
+        warningHtml = `<tr><td colspan="5" style="background: var(--warning-bg); color: var(--warning); padding: 10px; text-align: center;">
+          <strong>⚠ No emails or phones found.</strong> Profiles were detected but contact info may be hidden or use contact forms.
+        </td></tr>`;
+      }
+      resultsBody.innerHTML = warningHtml + rows.map(r => {
         const site = escapeHtml((r.website || '').replace(/^https?:\/\/(www\.)?/, '').slice(0, 25));
         const name = escapeHtml(r.lawyer_name || '—');
         const email = escapeHtml(r.lawyer_email || '—');
@@ -366,11 +381,11 @@
       }).join('');
     }
 
-    async function fetchResults() {
+    async function fetchResults(isComplete = false) {
       try {
         const res = await fetch(`/api/results?job_id=${encodeURIComponent(jobId)}`);
         const data = await res.json();
-        renderResults(data.rows || []);
+        renderResults(data.rows || [], isComplete);
       } catch (e) { console.error(e); }
     }
 
@@ -395,20 +410,26 @@
 
         messageBox.textContent = p.message || '';
         renderSites(p.url_status, p.urls);
-        await fetchResults();
 
         if (st === 'completed') {
+          await fetchResults(true);  // Pass true to show warnings if no data
           stopBtn.disabled = true;
           setDownloadEnabled(true);
           isFinished = true;
+          console.log('Job completed, stopping poll');
           return;
         }
         if (st === 'cancelled' || st === 'error') {
+          await fetchResults(true);
           stopBtn.disabled = true;
           if (completed > 0) setDownloadEnabled(true);
           isFinished = true;
+          console.log('Job stopped/errored, stopping poll');
           return;
         }
+        
+        // Still running - fetch results without completion warning
+        await fetchResults(false);
       } catch (e) {
         messageBox.textContent = `Error: ${e.message}`;
       }

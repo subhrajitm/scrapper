@@ -417,8 +417,38 @@ class WebsiteSpider(Spider):
         # Check if this is a lawyer profile page
         is_profile_page = self._is_lawyer_profile_page(current_url, response)
         
+        # Always extract general emails and phones from all pages
+        email_pattern = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+        visible_text = self._visible_text(response)
+        
+        # Debug: log visible text length
+        self.logger.debug(f"Visible text length on {current_url}: {len(visible_text)} chars")
+        
+        emails = email_pattern.findall(visible_text)
+        self.logger.debug(f"Raw emails found on {current_url}: {emails[:5]}")  # First 5
+        
+        # Filter out generic emails
+        filtered_emails = [e for e in emails if not self._is_generic_email(e)]
+        if filtered_emails:
+            self.logger.info(f"Found {len(filtered_emails)} non-generic emails on {current_url}: {filtered_emails[:3]}")
+        data['emails'].update(filtered_emails)
+        
+        # Extract phones from tel: links
+        tel_hrefs = response.css('a[href^="tel:"]::attr(href)').getall()
+        for href in tel_hrefs:
+            normalized = self._normalize_phone(href, from_tel=True)
+            if normalized:
+                data["phones"].add(normalized)
+
+        # Extract phones from visible text
+        phone_candidates = re.findall(r"\+?\d[\d\s().-]{7,}\d", visible_text)
+        for cand in phone_candidates:
+            normalized = self._normalize_phone(cand)
+            if normalized:
+                data["phones"].add(normalized)
+        
+        # Additionally extract lawyer profile if this is a profile page
         if is_profile_page:
-            # Extract lawyer-specific profile data
             profile_data = self._extract_lawyer_profile(response, base_url)
             if profile_data.get('lawyer_name') or profile_data.get('lawyer_email') or profile_data.get('lawyer_phone'):
                 # Check if we already have this profile
@@ -426,27 +456,11 @@ class WebsiteSpider(Spider):
                 if current_url not in existing_profiles:
                     data['lawyer_profiles'].append(profile_data)
                     self.logger.info(f"Found lawyer profile: {profile_data.get('lawyer_name', 'Unknown')} at {current_url}")
-        else:
-            # Extract general firm data
-            email_pattern = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-            visible_text = self._visible_text(response)
-            emails = email_pattern.findall(visible_text)
-            if emails:
-                self.logger.info(f"Found {len(emails)} emails on {current_url}")
-            data['emails'].update(emails)
-            
-            # Extract phones
-            tel_hrefs = response.css('a[href^="tel:"]::attr(href)').getall()
-            for href in tel_hrefs:
-                normalized = self._normalize_phone(href, from_tel=True)
-                if normalized:
-                    data["phones"].add(normalized)
-
-            phone_candidates = re.findall(r"\+?\d[\d\s().-]{7,}\d", visible_text)
-            for cand in phone_candidates:
-                normalized = self._normalize_phone(cand)
-                if normalized:
-                    data["phones"].add(normalized)
+                    # Also add profile email/phone to site-level data
+                    if profile_data.get('lawyer_email'):
+                        data['emails'].add(profile_data['lawyer_email'])
+                    if profile_data.get('lawyer_phone'):
+                        data['phones'].add(profile_data['lawyer_phone'])
         
         # Extract all links from the page
         links = response.css('a::attr(href)').getall()
@@ -461,10 +475,12 @@ class WebsiteSpider(Spider):
                     # Download the vCard file
                     if full_url not in self.processed_urls:
                         self.processed_urls.add(full_url)
+                        meta = {'base_url': base_url, 'profile_url': current_url if is_profile_page else None}
+                        # Don't use Playwright for vCard downloads (binary files)
                         yield Request(
                             full_url,
                             callback=self.parse_vcard,
-                            meta={'base_url': base_url, 'profile_url': current_url if is_profile_page else None},
+                            meta=meta,
                             dont_filter=True,
                             priority=depth + 2,  # Lower priority than page scraping
                         )
@@ -516,10 +532,12 @@ class WebsiteSpider(Spider):
                                 any(keyword in link_lower for keyword in ['contact', 'about', 'team', 'pdf', 'vcard', 'download', 'resources', 'media', 'gallery'])):
                                 self.processed_urls.add(full_url)
                                 # Priority increases with depth so base URLs of all sites finish first
+                                meta = {'base_url': base_url, 'depth': depth + 1}
+                                meta.update(self._get_playwright_meta())  # Add Playwright for JS rendering
                                 yield Request(
                                     full_url,
                                     callback=self.parse,
-                                    meta={'base_url': base_url, 'depth': depth + 1},
+                                    meta=meta,
                                     dont_filter=False,
                                     priority=depth + 1,
                                 )

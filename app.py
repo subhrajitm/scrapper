@@ -12,31 +12,26 @@ import requests
 # Load environment variables from .env file
 load_dotenv()
 
-# Import legacy functions (still used as fallback)
+# Import scraper functions
 from scrapy_scraper import (
     scrape_websites_with_scrapy,
     get_scraping_progress,
     reset_progress,
-    start_scrape_job as legacy_start_scrape_job,
-    stop_scrape_job as legacy_stop_scrape_job,
-    get_scraped_items as legacy_get_scraped_items,
-    get_job_urls as legacy_get_job_urls,
+    start_scrape_job,
+    stop_scrape_job,
+    get_scraped_items,
+    get_job_urls,
 )
 from list_importer import search_from_list, normalize_url
 
-# Import new job manager with database support
-from job_manager import (
-    start_job,
-    stop_job,
-    get_job_progress,
-    get_job_results,
-    get_cached_results,
-    cache_results,
-)
-from database import init_db, get_job, get_recent_jobs
-
-# Initialize database
-init_db()
+# Import database for caching (optional)
+try:
+    from database import init_db, get_recent_jobs, get_cached_search, save_search_cache, make_cache_key
+    init_db()
+    DB_AVAILABLE = True
+except Exception:
+    DB_AVAILABLE = False
+    def get_recent_jobs(limit=50): return []
 
 app = Flask(__name__)
 
@@ -107,11 +102,14 @@ def get_websites_for_filters(
     # Build location string for caching
     location_str = " ".join(p for p in [location, place] if p).strip()
     
-    # Check cache first
-    if use_cache:
-        cached = get_cached_results(industry, location_str, country, page)
-        if cached:
-            return cached["results"], cached["total_results"]
+    # Check cache first (if database available)
+    if use_cache and DB_AVAILABLE:
+        try:
+            cached = get_cached_search(industry, location_str, country, page)
+            if cached:
+                return cached["results"], cached["total_results"]
+        except Exception:
+            pass
 
     # Build a search query specifically for lawyers and law firms
     parts = []
@@ -165,9 +163,12 @@ def get_websites_for_filters(
         if link and link not in websites:
             websites.append(link)
     
-    # Cache results for 24 hours
-    if use_cache and websites:
-        cache_results(industry, location_str, country, page, websites, total_results, ttl_hours=24)
+    # Cache results for 24 hours (if database available)
+    if use_cache and websites and DB_AVAILABLE:
+        try:
+            save_search_cache(industry, location_str, country, page, websites, total_results, ttl_hours=24)
+        except Exception:
+            pass
 
     return websites, total_results
 
@@ -179,14 +180,7 @@ def get_websites_for_filters(
 def get_progress():
     """API endpoint to get scraping progress."""
     job_id = request.args.get("job_id")
-    
-    # Try new job manager first (uses database)
-    progress = get_job_progress(job_id) if job_id else {}
-    
-    # If not found in DB, try legacy in-memory
-    if not progress or progress.get("status") == "unknown":
-        progress = get_scraping_progress(job_id=job_id)
-    
+    progress = get_scraping_progress(job_id=job_id)
     return jsonify(progress)
 
 
@@ -209,8 +203,8 @@ def api_start_scrape():
     if not normalized:
         return jsonify({"error": "No valid URLs provided"}), 400
 
-    # Use new job manager (with database persistence)
-    job_id = start_job(normalized)
+    # Use original scraper function (works reliably)
+    job_id = start_scrape_job(normalized)
     return jsonify({"success": True, "job_id": job_id, "count": len(normalized)})
 
 
@@ -221,8 +215,7 @@ def api_stop_scrape():
     job_id = str(data.get("job_id", "")).strip()
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
-    # Use new job manager
-    ok = stop_job(job_id)
+    ok = stop_scrape_job(job_id)
     return jsonify({"success": bool(ok), "job_id": job_id})
 
 
@@ -233,8 +226,7 @@ def api_results():
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
 
-    # Use new job manager (checks DB first, falls back to in-memory)
-    items = get_job_results(job_id)
+    items = get_scraped_items(job_id)
 
     # Flatten to rows for easier display (one row per profile, or one row per site if no profiles)
     rows = []

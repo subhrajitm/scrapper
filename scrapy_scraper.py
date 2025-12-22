@@ -2,10 +2,27 @@
 Helper module for running Scrapy spiders from Flask.
 This module provides a synchronous interface to Scrapy's async framework.
 """
+import os
 import threading
 import time
 import uuid
 from typing import List, Dict, Any
+
+# Install asyncio reactor BEFORE importing reactor if Playwright is enabled
+# This must happen before any other Twisted imports
+_use_playwright = os.getenv("USE_PLAYWRIGHT", "false").lower() == "true"
+if _use_playwright:
+    try:
+        import asyncio
+        from twisted.internet import asyncioreactor
+        # Only install if not already installed
+        try:
+            asyncioreactor.install(asyncio.new_event_loop())
+        except Exception:
+            pass  # Already installed
+    except ImportError:
+        pass
+
 from scrapy.crawler import CrawlerRunner
 from scrapy.settings import Settings
 from twisted.internet import reactor
@@ -98,7 +115,7 @@ def _build_scrapy_settings() -> Settings:
     settings.set('AUTOTHROTTLE_START_DELAY', 0.25)
     settings.set('AUTOTHROTTLE_MAX_DELAY', 3)
     settings.set('AUTOTHROTTLE_TARGET_CONCURRENCY', 8.0)  # Target concurrency per domain
-    settings.set('LOG_LEVEL', 'INFO')  # Show info for debugging
+    settings.set('LOG_LEVEL', 'INFO')  # Show info level logs
 
     # Breadth-first crawling: process all base URLs before following subpages
     # Higher DEPTH_PRIORITY means deeper pages get lower priority (processed later)
@@ -272,7 +289,9 @@ class ItemsCollectorPipeline:
         job_id = getattr(spider, "job_id", None) or "default"
         _ensure_job_structures(job_id)
 
-        print(f"Pipeline closing spider. Items collected: {len(self.items_by_url)}")
+        print(f"Pipeline closing spider for job {job_id}. Items collected: {len(self.items_by_url)}")
+        
+        # Save items
         with items_lock:
             for website, data in self.items_by_url.items():
                 final_item = {
@@ -280,28 +299,33 @@ class ItemsCollectorPipeline:
                     'emails': sorted(list(data['emails'])),
                     'phones': sorted(list(data['phones'])),
                     'vcard_links': sorted(list(data['vcard_links'])),
-                    'vcard_files': data['vcard_files'],  # List of dicts with url, content (base64), size
+                    'vcard_files': data['vcard_files'],
                     'pdf_links': sorted(list(data['pdf_links'])),
                     'image_links': sorted(list(data['image_links'])),
-                    'lawyer_profiles': data['lawyer_profiles'],  # List of profile dicts
+                    'lawyer_profiles': data['lawyer_profiles'],
                 }
-                print(f"Final item for {website}: {len(final_item['emails'])} emails, {len(final_item['phones'])} phones, {len(final_item['vcard_files'])} vCard files, {len(final_item['lawyer_profiles'])} profiles")
+                print(f"Final item for {website}: {len(final_item['emails'])} emails, {len(final_item['phones'])} phones, {len(final_item['vcard_files'])} vCards, {len(final_item['lawyer_profiles'])} profiles")
                 scraped_items_by_job[job_id].append(final_item)
-                # Update progress - mark URL as completed
-                update_progress(job_id=job_id, url_status=(website, 'completed'))
-            
-            # Update completed count
-            with progress_lock:
-                prog = scraping_progress_by_job.get(job_id) or _default_progress_dict()
-                completed_count = sum(1 for status in prog.get('url_status', {}).values() if status == 'completed')
-                prog['completed'] = completed_count
-                scraping_progress_by_job[job_id] = prog
-            print(f"Total items in scraped_items[{job_id}]: {len(scraped_items_by_job.get(job_id, []))}")
         
-        # Clear live results now that we have final results
+        # Clear live results
         with live_results_lock:
-            if job_id in live_results_by_job:
-                del live_results_by_job[job_id]
+            live_results_by_job.pop(job_id, None)
+        
+        # Update progress to completed - CRITICAL for frontend to stop polling
+        items_count = len(scraped_items_by_job.get(job_id, []))
+        with progress_lock:
+            prog = scraping_progress_by_job.get(job_id) or _default_progress_dict()
+            # Mark all URLs as completed
+            for url in prog.get('urls', []):
+                prog.setdefault('url_status', {})[url] = 'completed'
+            prog['completed'] = len(prog.get('urls', []))
+            # Set final status
+            if prog.get('status') != 'cancelled':
+                prog['status'] = 'completed'
+                prog['message'] = f"Scraping completed! Found data for {items_count} website(s)."
+            scraping_progress_by_job[job_id] = prog
+        
+        print(f">>> JOB {job_id} COMPLETED - Status: completed, Items: {items_count} <<<")
 
 
 def get_scraping_progress(job_id: str | None = None) -> Dict[str, Any]:
@@ -449,12 +473,14 @@ def start_scrape_job(urls: List[str]) -> str:
                         _job_crawlers.pop(job_id, None)
 
                 def on_complete(_result):
+                    print(f"[on_complete] Job {job_id} finished")
                     items_count = len(get_scraped_items(job_id))
                     update_progress(
                         job_id=job_id,
                         status="completed",
                         message=f"Scraping completed! Found data for {items_count} website(s).",
                     )
+                    print(f"[on_complete] Status set to completed for {job_id}")
                     _cleanup()
                     return _result
 

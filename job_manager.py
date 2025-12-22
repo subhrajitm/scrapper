@@ -76,70 +76,105 @@ def start_job(urls: List[str]) -> str:
 
 def _start_job_inmemory(job_id: str, urls: List[str]) -> None:
     """Start job using the existing in-memory scrapy_scraper module."""
-    from scrapy_scraper import start_scrape_job as legacy_start
-    # The legacy function generates its own job_id, so we need to sync
-    # For now, we'll start with legacy and sync progress to DB
     import threading
-
-    def run_and_sync():
-        from scrapy_scraper import (
-            _ensure_job_structures,
-            _ensure_reactor_running,
-            _get_or_create_runner,
-            _build_scrapy_settings,
-            update_progress,
-            scraped_items_by_job,
-            items_lock,
-        )
-        from spiders.website_spider import WebsiteSpider
-        from twisted.internet import reactor, defer
-
-        _ensure_job_structures(job_id)
-        update_progress(job_id=job_id, status="running", total=len(urls), urls=urls)
-
-        # Update database
-        update_job(job_id, status="running", message="Starting scrape...")
-
-        _ensure_reactor_running()
-        runner = _get_or_create_runner()
-
-        @defer.inlineCallbacks
-        def crawl_all():
-            url_status = {u: "pending" for u in urls}
-            completed = 0
-
-            for url in urls:
-                url_status[url] = "scraping"
-                update_progress(job_id=job_id, url_status=url_status, message=f"Scraping {url}...")
-                update_job(job_id, url_status=url_status, message=f"Scraping {url}...")
-
+    from twisted.internet import reactor
+    
+    from scrapy_scraper import (
+        _ensure_job_structures,
+        _ensure_reactor_running,
+        _get_runner,
+        _crawl_serial_lock,
+        scraping_progress_by_job,
+        progress_lock,
+        scraped_items_by_job,
+        items_lock,
+        _job_cancelled,
+        _job_crawlers,
+        _job_control_lock,
+        update_progress,
+        get_scraped_items,
+        is_job_cancelled,
+        _latest_job_id,
+        _latest_job_id_lock,
+    )
+    from spiders.website_spider import WebsiteSpider
+    
+    # Set as latest job
+    import scrapy_scraper
+    with _latest_job_id_lock:
+        scrapy_scraper._latest_job_id = job_id
+    
+    # Initialize structures
+    _ensure_job_structures(job_id)
+    with items_lock:
+        scraped_items_by_job[job_id] = []
+    with _job_control_lock:
+        _job_cancelled[job_id] = False
+    
+    with progress_lock:
+        scraping_progress_by_job[job_id] = {
+            'job_id': job_id,
+            'status': 'running',
+            'total': len(urls),
+            'completed': 0,
+            'current_url': '',
+            'urls': urls,
+            'url_status': {url: 'pending' for url in urls},
+            'message': f'Starting to scrape {len(urls)} website(s)...',
+        }
+    
+    # Update database
+    update_job(job_id, status="running", message="Starting scrape...")
+    
+    def _background_start():
+        with _crawl_serial_lock:
+            if is_job_cancelled(job_id):
+                update_progress(job_id=job_id, status="cancelled", message="Cancelled before start.")
+                update_job(job_id, status="cancelled", message="Cancelled before start.")
+                return
+            
+            update_progress(job_id=job_id, message="Initializing scraper...")
+            _ensure_reactor_running()
+            runner = _get_runner()
+            
+            def _start_in_reactor():
                 try:
-                    yield runner.crawl(
-                        WebsiteSpider,
-                        start_urls=[url],
-                        job_id=job_id,
-                    )
-                    url_status[url] = "completed"
-                    completed += 1
+                    crawler = runner.create_crawler(WebsiteSpider)
+                    with _job_control_lock:
+                        _job_crawlers[job_id] = crawler
+                    deferred = runner.crawl(crawler, urls=urls, job_id=job_id)
                 except Exception as e:
-                    logger.error(f"Error scraping {url}: {e}")
-                    url_status[url] = "error"
-
-                update_progress(job_id=job_id, completed=completed, url_status=url_status)
-                update_job(job_id, completed=completed, url_status=url_status)
-
-            update_progress(job_id=job_id, status="completed", message="Completed!")
-            update_job(job_id, status="completed", message="Completed!")
-
-            # Sync items to database
-            with items_lock:
-                items = scraped_items_by_job.get(job_id, [])
-            for item in items:
-                save_scraped_item(job_id, item)
-
-        reactor.callFromThread(lambda: defer.ensureDeferred(crawl_all()))
-
-    thread = threading.Thread(target=run_and_sync, daemon=True)
+                    update_progress(job_id=job_id, status="error", message=f"Error: {e}")
+                    update_job(job_id, status="error", message=str(e))
+                    return
+                
+                def on_complete(_result):
+                    items = get_scraped_items(job_id)
+                    update_progress(job_id=job_id, status="completed", message=f"Completed! Found {len(items)} site(s).")
+                    update_job(job_id, status="completed", message=f"Completed! Found {len(items)} site(s).")
+                    # Sync to database
+                    for item in items:
+                        save_scraped_item(job_id, item)
+                    with _job_control_lock:
+                        _job_crawlers.pop(job_id, None)
+                
+                def on_error(failure):
+                    msg = str(failure.value) if hasattr(failure, 'value') else str(failure)
+                    if is_job_cancelled(job_id):
+                        update_progress(job_id=job_id, status="cancelled", message="Cancelled.")
+                        update_job(job_id, status="cancelled", message="Cancelled.")
+                    else:
+                        update_progress(job_id=job_id, status="error", message=msg)
+                        update_job(job_id, status="error", message=msg)
+                    with _job_control_lock:
+                        _job_crawlers.pop(job_id, None)
+                
+                deferred.addCallback(on_complete)
+                deferred.addErrback(on_error)
+            
+            reactor.callFromThread(_start_in_reactor)
+    
+    thread = threading.Thread(target=_background_start, daemon=True)
     thread.start()
 
 
