@@ -24,14 +24,23 @@ from scrapy_scraper import (
 )
 from list_importer import search_from_list, normalize_url
 
-# Import database for caching (optional)
+# Import database for caching and persistence (optional)
 try:
-    from database import init_db, get_recent_jobs, get_cached_search, save_search_cache, make_cache_key
+    from database import (
+        init_db, 
+        get_recent_jobs, 
+        get_job_items,
+        get_cached_search, 
+        save_search_cache, 
+        make_cache_key,
+    )
     init_db()
     DB_AVAILABLE = True
-except Exception:
+except Exception as e:
+    print(f"Database not available: {e}")
     DB_AVAILABLE = False
     def get_recent_jobs(limit=50): return []
+    def get_job_items(job_id): return []
 
 app = Flask(__name__)
 
@@ -279,6 +288,78 @@ def api_jobs():
 def history_page():
     """Job history page."""
     return render_template("history.html")
+
+
+@app.route("/admin", methods=["GET"])
+def admin_page():
+    """Admin panel to view all scraped data."""
+    return render_template("admin.html")
+
+
+@app.route("/api/admin/data", methods=["GET"])
+def api_admin_data():
+    """Get all scraped data for admin panel (from memory + database)."""
+    from scrapy_scraper import scraped_items_by_job, scraping_progress_by_job
+    
+    jobs_data = []
+    seen_job_ids = set()
+    
+    # First, get data from in-memory (current session)
+    for job_id, items in scraped_items_by_job.items():
+        seen_job_ids.add(job_id)
+        progress = scraping_progress_by_job.get(job_id, {})
+        jobs_data.append({
+            "job_id": job_id,
+            "status": progress.get("status", "unknown"),
+            "total_urls": progress.get("total", 0),
+            "completed": progress.get("completed", 0),
+            "items": items,
+            "source": "memory",
+        })
+    
+    # Then, get data from database (persisted from previous sessions)
+    if DB_AVAILABLE:
+        try:
+            from database import get_recent_jobs, get_job_items
+            db_jobs = get_recent_jobs(limit=100)
+            for job in db_jobs:
+                if job.id not in seen_job_ids:
+                    db_items = get_job_items(job.id)
+                    jobs_data.append({
+                        "job_id": job.id,
+                        "status": job.status,
+                        "total_urls": job.total_urls,
+                        "completed": job.completed_urls,
+                        "items": db_items,
+                        "source": "database",
+                        "created_at": job.created_at.isoformat() if job.created_at else None,
+                    })
+        except Exception as e:
+            print(f"Error loading from DB: {e}")
+    
+    return jsonify({"jobs": jobs_data})
+
+
+@app.route("/api/admin/export-csv", methods=["GET"])
+def api_admin_export_csv():
+    """Export all scraped data as CSV."""
+    from scrapy_scraper import scraped_items_by_job
+    
+    all_items = []
+    for job_id, items in scraped_items_by_job.items():
+        all_items.extend(items)
+    
+    if not all_items:
+        return Response("No data to export", mimetype="text/plain")
+    
+    websites = [item.get("website", "") for item in all_items]
+    csv_content = build_csv_from_scraped_data(websites, all_items)
+    
+    return Response(
+        csv_content,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=all_scraped_data.csv"},
+    )
 
 
 def build_csv_from_scraped_data(websites: List[str], scraped_data: List[dict]) -> str:

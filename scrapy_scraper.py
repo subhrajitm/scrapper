@@ -291,7 +291,7 @@ class ItemsCollectorPipeline:
 
         print(f"Pipeline closing spider for job {job_id}. Items collected: {len(self.items_by_url)}")
         
-        # Save items
+        # Save items to memory
         with items_lock:
             for website, data in self.items_by_url.items():
                 final_item = {
@@ -306,6 +306,14 @@ class ItemsCollectorPipeline:
                 }
                 print(f"Final item for {website}: {len(final_item['emails'])} emails, {len(final_item['phones'])} phones, {len(final_item['vcard_files'])} vCards, {len(final_item['lawyer_profiles'])} profiles")
                 scraped_items_by_job[job_id].append(final_item)
+                
+                # Also save to database for persistence
+                try:
+                    from database import save_scraped_item, create_job, update_job
+                    save_scraped_item(job_id, final_item)
+                    print(f"  → Saved to database: {website}")
+                except Exception as e:
+                    print(f"  → DB save failed: {e}")
         
         # Clear live results
         with live_results_lock:
@@ -324,6 +332,13 @@ class ItemsCollectorPipeline:
                 prog['status'] = 'completed'
                 prog['message'] = f"Scraping completed! Found data for {items_count} website(s)."
             scraping_progress_by_job[job_id] = prog
+        
+        # Update job in database
+        try:
+            from database import update_job
+            update_job(job_id, status="completed", completed=items_count, message=f"Found data for {items_count} website(s).")
+        except Exception as e:
+            print(f"DB job update failed: {e}")
         
         print(f">>> JOB {job_id} COMPLETED - Status: completed, Items: {items_count} <<<")
 
@@ -435,6 +450,14 @@ def start_scrape_job(urls: List[str]) -> str:
     if not urls:
         update_progress(job_id=job_id, status="error", message="No URLs provided.")
         return job_id
+
+    # Create job in database for persistence
+    try:
+        from database import create_job
+        create_job(job_id, urls)
+        print(f"Job {job_id} created in database with {len(urls)} URLs")
+    except Exception as e:
+        print(f"DB job creation failed (non-fatal): {e}")
 
     with progress_lock:
         scraping_progress_by_job[job_id] = {

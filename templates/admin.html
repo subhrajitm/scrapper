@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - LegalScrape Pro</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --surface: #fff;
+      --border: #e1e4e8;
+      --text: #24292f;
+      --text-muted: #57606a;
+      --primary: #0969da;
+      --success: #1a7f37;
+      --success-bg: #dafbe1;
+      --warning: #9a6700;
+      --warning-bg: #fff8c5;
+      --danger: #cf222e;
+      --danger-bg: #ffebe9;
+      --header-bg: #24292f;
+      --header-text: #f0f6fc;
+      --radius: 6px;
+      --shadow-sm: 0 1px 0 rgba(31,35,40,.04);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .header {
+      background: var(--header-bg);
+      padding: 0 16px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      color: var(--header-text);
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo svg { fill: var(--header-text); }
+    .nav { display: flex; gap: 4px; }
+    .nav a {
+      color: rgba(255,255,255,.7);
+      text-decoration: none;
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      transition: all .15s;
+    }
+    .nav a:hover { color: #fff; background: rgba(255,255,255,.1); }
+    .nav a.active { color: #fff; background: rgba(255,255,255,.15); }
+    .main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-value { font-size: 32px; font-weight: 700; color: var(--primary); }
+    .stat-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 16px;
+    }
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .panel-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .panel-body { padding: 16px; }
+    .website-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .website-header {
+      background: var(--bg);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .website-header:hover { background: #e9ebee; }
+    .website-url { font-weight: 600; color: var(--primary); }
+    .website-stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); }
+    .website-stats span { display: flex; align-items: center; gap: 4px; }
+    .website-content { display: none; padding: 16px; border-top: 1px solid var(--border); }
+    .website-content.open { display: block; }
+    .data-section { margin-bottom: 16px; }
+    .data-section:last-child { margin-bottom: 0; }
+    .data-section h4 { font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+    .data-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .data-tag {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+    .data-tag.email { background: #ddf4ff; border-color: #54aeff; }
+    .data-tag.phone { background: #dafbe1; border-color: #4ac26b; }
+    .profile-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .profile-name { font-weight: 600; margin-bottom: 4px; }
+    .profile-details { font-size: 12px; color: var(--text-muted); }
+    .profile-details a { color: var(--primary); }
+    .empty-msg { color: var(--text-muted); font-style: italic; }
+    .btn {
+      height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all .15s;
+      text-decoration: none;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .btn:hover { background: var(--bg); }
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn-primary:hover { background: #0860ca; }
+    .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #a40e26; }
+    .search-box {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      width: 300px;
+    }
+    .filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .toggle-icon { transition: transform .2s; }
+    .toggle-icon.open { transform: rotate(90deg); }
+    @media (max-width: 768px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .search-box { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <a href="/" class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      LegalScrape Pro
+    </a>
+    <nav class="nav">
+      <a href="/">Search</a>
+      <a href="/history">History</a>
+      <a href="/admin" class="active">Admin</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <!-- Stats Overview -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="totalJobs">0</div>
+        <div class="stat-label">Total Jobs</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalWebsites">0</div>
+        <div class="stat-label">Websites Scraped</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalEmails">0</div>
+        <div class="stat-label">Emails Found</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalPhones">0</div>
+        <div class="stat-label">Phones Found</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalProfiles">0</div>
+        <div class="stat-label">Lawyer Profiles</div>
+      </div>
+    </div>
+
+    <!-- Data Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.5A1.5 1.5 0 0 1 1.5 0h13A1.5 1.5 0 0 1 16 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 14.5v-13zM1.5 1a.5.5 0 0 0-.5.5V5h4V1H1.5zM5 6H1v4h4V6zm1 4h4V6H6v4zm-1 1H1v3.5a.5.5 0 0 0 .5.5H5v-4zm1 0v4h4v-4H6zm5 0v4h3.5a.5.5 0 0 0 .5-.5V11h-4zm0-1h4V6h-4v4zm0-5h4V1.5a.5.5 0 0 0-.5-.5H11v4zm-1 0V1H6v4h4z"/></svg>
+          All Scraped Data
+        </span>
+        <div class="filters">
+          <input type="text" class="search-box" id="searchBox" placeholder="Search websites, emails, names...">
+          <button class="btn" onclick="expandAll()">Expand All</button>
+          <button class="btn" onclick="collapseAll()">Collapse All</button>
+          <button class="btn btn-primary" onclick="exportAll()">Export All CSV</button>
+        </div>
+      </div>
+      <div class="panel-body" id="dataContainer">
+        <p class="empty-msg">Loading data...</p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let allData = [];
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function toggleWebsite(el) {
+      const content = el.nextElementSibling;
+      const icon = el.querySelector('.toggle-icon');
+      content.classList.toggle('open');
+      icon.classList.toggle('open');
+    }
+
+    function expandAll() {
+      document.querySelectorAll('.website-content').forEach(el => el.classList.add('open'));
+      document.querySelectorAll('.toggle-icon').forEach(el => el.classList.add('open'));
+    }
+
+    function collapseAll() {
+      document.querySelectorAll('.website-content').forEach(el => el.classList.remove('open'));
+      document.querySelectorAll('.toggle-icon').forEach(el => el.classList.remove('open'));
+    }
+
+    function renderData(data, filter = '') {
+      const container = document.getElementById('dataContainer');
+      filter = filter.toLowerCase();
+
+      let html = '';
+      let totalEmails = 0, totalPhones = 0, totalProfiles = 0, websiteCount = 0;
+
+      data.forEach(job => {
+        const items = job.items || [];
+        items.forEach(item => {
+          const website = item.website || '';
+          const emails = item.emails || [];
+          const phones = item.phones || [];
+          const profiles = item.lawyer_profiles || [];
+
+          // Filter
+          if (filter) {
+            const searchText = [website, ...emails, ...phones, ...profiles.map(p => p.lawyer_name || '')].join(' ').toLowerCase();
+            if (!searchText.includes(filter)) return;
+          }
+
+          websiteCount++;
+          totalEmails += emails.length;
+          totalPhones += phones.length;
+          totalProfiles += profiles.length;
+
+          html += `
+            <div class="website-card">
+              <div class="website-header" onclick="toggleWebsite(this)">
+                <div>
+                  <span class="toggle-icon">▶</span>
+                  <span class="website-url">${escapeHtml(website)}</span>
+                </div>
+                <div class="website-stats">
+                  <span>📧 ${emails.length} emails</span>
+                  <span>📞 ${phones.length} phones</span>
+                  <span>👤 ${profiles.length} profiles</span>
+                </div>
+              </div>
+              <div class="website-content">
+                <div class="data-section">
+                  <h4>Emails</h4>
+                  ${emails.length ? `<div class="data-list">${emails.map(e => `<span class="data-tag email">${escapeHtml(e)}</span>`).join('')}</div>` : '<p class="empty-msg">No emails found</p>'}
+                </div>
+                <div class="data-section">
+                  <h4>Phone Numbers</h4>
+                  ${phones.length ? `<div class="data-list">${phones.map(p => `<span class="data-tag phone">${escapeHtml(p)}</span>`).join('')}</div>` : '<p class="empty-msg">No phones found</p>'}
+                </div>
+                <div class="data-section">
+                  <h4>Lawyer Profiles (${profiles.length})</h4>
+                  ${profiles.length ? profiles.map(p => `
+                    <div class="profile-card">
+                      <div class="profile-name">${escapeHtml(p.lawyer_name) || 'Unknown'}</div>
+                      <div class="profile-details">
+                        ${p.lawyer_email ? `📧 ${escapeHtml(p.lawyer_email)}` : ''}
+                        ${p.lawyer_phone ? ` 📞 ${escapeHtml(p.lawyer_phone)}` : ''}
+                        ${p.profile_url ? ` <a href="${escapeHtml(p.profile_url)}" target="_blank">View Profile →</a>` : ''}
+                      </div>
+                    </div>
+                  `).join('') : '<p class="empty-msg">No profiles found</p>'}
+                </div>
+              </div>
+            </div>
+          `;
+        });
+      });
+
+      if (!html) {
+        html = '<p class="empty-msg">No data found. Start scraping to see results here.</p>';
+      }
+
+      container.innerHTML = html;
+
+      // Update stats
+      document.getElementById('totalJobs').textContent = data.length;
+      document.getElementById('totalWebsites').textContent = websiteCount;
+      document.getElementById('totalEmails').textContent = totalEmails;
+      document.getElementById('totalPhones').textContent = totalPhones;
+      document.getElementById('totalProfiles').textContent = totalProfiles;
+    }
+
+    async function loadData() {
+      try {
+        const res = await fetch('/api/admin/data');
+        const data = await res.json();
+        allData = data.jobs || [];
+        renderData(allData);
+      } catch (e) {
+        document.getElementById('dataContainer').innerHTML = `<p class="empty-msg">Error loading data: ${e.message}</p>`;
+      }
+    }
+
+    function exportAll() {
+      window.location.href = '/api/admin/export-csv';
+    }
+
+    // Search
+    document.getElementById('searchBox').addEventListener('input', (e) => {
+      renderData(allData, e.target.value);
+    });
+
+    loadData();
+  </script>
+</body>
+</html>
